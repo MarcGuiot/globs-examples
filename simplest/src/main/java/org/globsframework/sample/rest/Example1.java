@@ -1,4 +1,4 @@
-package org.globsframework.sample.simplest;
+package org.globsframework.sample.rest;
 
 import org.apache.http.impl.nio.bootstrap.HttpServer;
 import org.apache.http.impl.nio.bootstrap.ServerBootstrap;
@@ -8,7 +8,6 @@ import org.globsframework.metamodel.GlobType;
 import org.globsframework.metamodel.GlobTypeLoaderFactory;
 import org.globsframework.metamodel.annotations.AutoIncrement;
 import org.globsframework.metamodel.annotations.KeyField;
-import org.globsframework.metamodel.fields.BooleanField;
 import org.globsframework.metamodel.fields.IntegerField;
 import org.globsframework.metamodel.fields.StringField;
 import org.globsframework.model.Glob;
@@ -29,7 +28,7 @@ insert in the table and return the newly student.
 
  */
 
-public class Simple {
+public class Example1 {
 
     public static void main(String[] args) {
         Glob argument = ParseCommandLine.parse(ArgumentType.TYPE, args);
