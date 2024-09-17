@@ -53,7 +53,10 @@ import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
+
+import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
 
 /*
 Expose api route /student en post
@@ -82,7 +85,11 @@ public class Example2 {
             db.commitAndClose();
         }
 
-        GQLGlobCallerBuilder<GQLGlobCaller.GQLContext> gqlGlobCallerBuilder = new GQLGlobCallerBuilder<>();
+        ThreadFactory factory = Thread.ofVirtual().name("GQL").factory();
+
+        GQLGlobCallerBuilder<GQLGlobCaller.GQLContext> gqlGlobCallerBuilder = new GQLGlobCallerBuilder<>(
+                newThreadPerTaskExecutor(factory)
+        );
 
         gqlGlobCallerBuilder.registerLoader(QueryType.professor, (gqlField, callContext, parents) -> {
             load(gqlField, parents, EntityQuery.uuid, DbProfessorType.TYPE, DbProfessorType.uuid, sqlService);
@@ -125,11 +132,11 @@ public class Example2 {
             try {
                 parents.forEach(p ->
                         ConnectionBuilder.withDbKey(DbStudentType.uuid)
-                        .withParam(Parameter.EMPTY, Parameter.after,
-                                Parameter.first, Parameter.before,
-                                Parameter.last, Parameter.skip)
-                        .withOrder(Parameter.orderBy, Parameter.order)
-                        .scanAll(gqlField, p, null, db));
+                                .withParam(Parameter.EMPTY, Parameter.after,
+                                        Parameter.first, Parameter.before,
+                                        Parameter.last, Parameter.skip)
+                                .withOrder(Parameter.orderBy, Parameter.order)
+                                .scanAll(gqlField, p, null, db));
             } finally {
                 db.commitAndClose();
             }
@@ -215,11 +222,11 @@ public class Example2 {
                 .post(GraphQlRequest.TYPE, null, null, (body, url, queryParameters, header) -> {
                     String query = body.get(GraphQlRequest.query);
                     if (query.contains("__schema")) {
-                            final ExecutionResult execute = gql.execute(query);
-                            final Map<String, Object> stringObjectMap = execute.toSpecification();
-                            final String s1 = gson.toJson(stringObjectMap);
-                            return CompletableFuture.completedFuture(GlobHttpContent.TYPE.instantiate()
-                                    .set(GlobHttpContent.content, s1.getBytes(StandardCharsets.UTF_8)));
+                        final ExecutionResult execute = gql.execute(query);
+                        final Map<String, Object> stringObjectMap = execute.toSpecification();
+                        final String s1 = gson.toJson(stringObjectMap);
+                        return CompletableFuture.completedFuture(GlobHttpContent.TYPE.instantiate()
+                                .set(GlobHttpContent.content, s1.getBytes(StandardCharsets.UTF_8)));
                     }
                     String v = body.get(GraphQlRequest.variables);
                     Map<String, String> variables = new HashMap<>();
@@ -257,14 +264,14 @@ public class Example2 {
         }
     }
 
-    private static void search(GqlField gqlField, List<OnLoad> parents, SqlService sqlService, GlobType dbType, StringField...fields) {
+    private static void search(GqlField gqlField, List<OnLoad> parents, SqlService sqlService, GlobType dbType, StringField... fields) {
         Optional<String> searchValue = gqlField.field().parameters().map(SearchQuery.search);
         SqlConnection db = sqlService.getDb();
         try (SelectQuery query = db.getQueryBuilder(dbType,
                         searchValue.map(s -> Constraints.or(
-                                Arrays.stream(fields).map(f -> Constraints.containsIgnoreCase(f, s)).toArray(Constraint[]::new)))
+                                        Arrays.stream(fields).map(f -> Constraints.containsIgnoreCase(f, s)).toArray(Constraint[]::new)))
                                 .orElse(null)
-                        )
+                )
                 .selectAll()
                 .getQuery()) {
             query.executeAsGlobStream().forEach(parents.getFirst().onNew()::push);
@@ -273,7 +280,7 @@ public class Example2 {
         }
     }
 
-    private static CompletableFuture<Object> loadFromParent(List<OnLoad> parents, StringField mainClassUUID, SqlService sqlService, StringField uuid, GlobType dbType) {
+    private static CompletableFuture<Void> loadFromParent(List<OnLoad> parents, StringField mainClassUUID, SqlService sqlService, StringField uuid, GlobType dbType) {
         Map<String, List<OnLoad>> toQuery =
                 parents.stream().collect(
                         Collectors.groupingBy(onLoad ->
@@ -306,10 +313,6 @@ public class Example2 {
     private static void load(GqlField gqlField, List<OnLoad> parents, StringField paramUUIDField, GlobType dbType,
                              StringField dbUUID, SqlService sqlService) {
         String uuid = gqlField.field().parameters().map(paramUUIDField).orElseThrow();
-        loadFromUUID(parents, dbType, dbUUID, sqlService, uuid);
-    }
-
-    private static void loadFromUUID(List<OnLoad> parents, GlobType dbType, StringField dbUUID, SqlService sqlService, String uuid) {
         SqlConnection db = sqlService.getDb();
         try (SelectQuery query = db.getQueryBuilder(dbType, Constraints.equal(dbUUID, uuid))
                 .selectAll()

@@ -32,7 +32,6 @@ public class Example1 {
 
     public static void main(String[] args) {
         Glob argument = ParseCommandLine.parse(ArgumentType.TYPE, args);
-        System.out.println();
         SqlService sqlService = new JdbcSqlService(argument.getNotEmpty(ArgumentType.dbUrl),
                 argument.getNotEmpty(ArgumentType.user),
                 argument.get(ArgumentType.password));
@@ -130,4 +129,54 @@ public class Example1 {
             GlobTypeLoaderFactory.create(ArgumentType.class).load();
         }
     }
+
+//    class MangedObject {
+//        GlobType type;
+//        Map<Field, Object> data;
+//    }
+//
+//    void jsonSerialize(StringBuilder buf, MangedObject mangedObject) {
+//        buf.append("{\n");
+//        Field[] fields = mangedObject.type.getFields();
+//        for (Field field : fields) {
+//            buf.append("\"").append(field.getName()).append("\":").append(mangedObject.data.get(field)).append(",");
+//        }
+//    }
+//
+//    void generateJsonSerialiser(StringBuffer buf, Point mo){
+//        buf.append("{");
+//        buf.append("‘x’:");
+//        buf.append(mo.x);
+//        buf.append(",");
+//    }
+//
+//
+//        void GenerateJson(GlobType moType, StringBuffer buf)	{
+//        buf.append("generateJsonSerialiser(StringBuffer buf,");
+//        buf.append(moType.getName()).append("){\n");
+//        for (Field field : moType.getFields()) {
+//            buf.append("\"").append(field.getName()).append("\"");
+//            buf.append("mo.").append(field.getName());
+//        }
+//    }
+//
+//    class PointType {
+//        public static GlobType TYPE;
+//
+//        public static IntegerField x;
+//
+//        public static IntegerField y;
+//    }
+//
+//    Point shift(Point point, int x, int y) {
+//        return new Point(point.x + x, point.y + y);
+//    }
+//
+//    Glob shift(Glob mo, int x, int y) {
+//        return PointType.TYPE.instantiate()
+//                .set(PointType.x, mo.get(PointType.x))
+//                .set(PointType.y, mo.get(PointType.y));
+//    }
+
+
 }
