@@ -59,11 +59,15 @@ import java.util.stream.Collectors;
 import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
 
 /*
+start with following argument
+
+ --dbUrl jdbc:hsqldb:file:./db/ --user sa --password ""
+
+
 Expose api route /student en post
 Expose un route /api/openapi
 create a table
 insert in the table and return the newly student.
-
  */
 
 public class Example2 {
