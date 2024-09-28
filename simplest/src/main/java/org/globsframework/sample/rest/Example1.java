@@ -5,8 +5,8 @@ import org.apache.http.impl.nio.bootstrap.ServerBootstrap;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
 import org.globsframework.core.metamodel.GlobTypeLoaderFactory;
-import org.globsframework.core.metamodel.annotations.AutoIncrement;
-import org.globsframework.core.metamodel.annotations.KeyField;
+import org.globsframework.core.metamodel.annotations.AutoIncrement_;
+import org.globsframework.core.metamodel.annotations.KeyField_;
 import org.globsframework.core.metamodel.fields.IntegerField;
 import org.globsframework.core.metamodel.fields.StringField;
 import org.globsframework.core.model.Glob;
@@ -14,7 +14,7 @@ import org.globsframework.core.streams.accessors.IntegerAccessor;
 import org.globsframework.core.utils.collections.Pair;
 import org.globsframework.http.HttpServerRegister;
 import org.globsframework.sql.*;
-import org.globsframework.sql.annotations.typed.TargetTypeNameAnnotation;
+import org.globsframework.sql.annotations.DbTableName_;
 import org.globsframework.sql.constraints.Constraints;
 import org.globsframework.sql.drivers.jdbc.JdbcSqlService;
 
@@ -87,11 +87,11 @@ public class Example1 {
     }
 
     public static class StudentType {
-        @TargetTypeNameAnnotation("students")
+        @DbTableName_("students")
         public static GlobType TYPE;
 
-        @KeyField
-        @AutoIncrement
+        @KeyField_
+        @AutoIncrement_
         public static IntegerField id;
 
         public static StringField firstName;

@@ -18,9 +18,9 @@ import org.apache.http.impl.nio.reactor.IOReactorConfig;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
 import org.globsframework.core.metamodel.GlobTypeLoaderFactory;
-import org.globsframework.core.metamodel.annotations.FieldNameAnnotation;
+import org.globsframework.core.metamodel.annotations.FieldName_;
 import org.globsframework.core.metamodel.annotations.InitUniqueGlob;
-import org.globsframework.core.metamodel.annotations.KeyField;
+import org.globsframework.core.metamodel.annotations.KeyField_;
 import org.globsframework.core.metamodel.annotations.Target;
 import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
@@ -40,9 +40,9 @@ import org.globsframework.graphql.parser.GqlField;
 import org.globsframework.http.GlobHttpContent;
 import org.globsframework.http.HttpServerRegister;
 import org.globsframework.json.GSonUtils;
-import org.globsframework.json.annottations.IsJsonContentAnnotation;
+import org.globsframework.json.annottations.IsJsonContent_;
 import org.globsframework.sql.*;
-import org.globsframework.sql.annotations.typed.TargetTypeNameAnnotation;
+import org.globsframework.sql.annotations.DbTableName_;
 import org.globsframework.sql.constraints.Constraint;
 import org.globsframework.sql.constraints.Constraints;
 import org.globsframework.sql.drivers.jdbc.JdbcSqlService;
@@ -331,10 +331,10 @@ public class Example2 {
 
 
     public static class DbClassType {
-        @TargetTypeNameAnnotation("classes")
+        @DbTableName_("classes")
         public static GlobType TYPE;
 
-        @KeyField
+        @KeyField_
         public static StringField uuid;
 
         public static StringField name;
@@ -347,10 +347,10 @@ public class Example2 {
     }
 
     public static class DbProfessorType {
-        @TargetTypeNameAnnotation("professors")
+        @DbTableName_("professors")
         public static GlobType TYPE;
 
-        @KeyField
+        @KeyField_
         public static StringField uuid;
 
         public static StringField firstName;
@@ -363,10 +363,10 @@ public class Example2 {
     }
 
     public static class DbStudentType {
-        @TargetTypeNameAnnotation("students")
+        @DbTableName_("students")
         public static GlobType TYPE;
 
-        @KeyField
+        @KeyField_
         public static StringField uuid;
 
         public static StringField firstName;
@@ -383,7 +383,7 @@ public class Example2 {
     public static class UrlType {
         public static GlobType TYPE;
 
-        @FieldNameAnnotation("uuid")
+        @FieldName_("uuid")
         public static StringField uuid;
 
         static {
@@ -427,7 +427,7 @@ public class Example2 {
 
         @GQLQueryParam_(SearchQuery.class)
         @Target(GQLClass.class)
-        @FieldNameAnnotation("classes")
+        @FieldName_("classes")
         public static GlobArrayField classes;
 
         @GQLQueryParam_(SearchQuery.class)
@@ -440,7 +440,7 @@ public class Example2 {
 
         @GQLQueryParam_(EntityQuery.class)
         @Target(GQLClass.class)
-        @FieldNameAnnotation("class")
+        @FieldName_("class")
         public static GlobField class_;
 
         @GQLQueryParam_(EntityQuery.class)
@@ -501,7 +501,7 @@ public class Example2 {
         public static StringField lastName;
 
         @Target(GQLClass.class)
-        @FieldNameAnnotation("class")
+        @FieldName_("class")
         public static GlobField class_;
 
         static {
@@ -585,7 +585,7 @@ public class Example2 {
 
         public static StringField query;
 
-        @IsJsonContentAnnotation
+        @IsJsonContent_
         public static StringField variables;
 
         static {
