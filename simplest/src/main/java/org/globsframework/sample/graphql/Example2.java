@@ -55,6 +55,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
 
@@ -278,7 +279,9 @@ public class Example2 {
                 )
                 .selectAll()
                 .getQuery()) {
-            query.executeAsGlobStream().forEach(parents.getFirst().onNew()::push);
+            try (Stream<Glob> globStream = query.executeAsGlobStream()) {
+                globStream.forEach(parents.getFirst().onNew()::push);
+            }
         } finally {
             db.commitAndClose();
         }
@@ -293,9 +296,10 @@ public class Example2 {
         try (SelectQuery query = db.getQueryBuilder(dbType, Constraints.in(uuid, toQuery.keySet()))
                 .selectAll()
                 .getQuery()) {
-            query
-                    .executeAsGlobStream().forEach(d -> toQuery.getOrDefault(d.get(uuid), List.of())
-                            .forEach(onLoad -> onLoad.onNew().push(d)));
+            try (Stream<Glob> globStream = query.executeAsGlobStream()) {
+                globStream.forEach(d -> toQuery.getOrDefault(d.get(uuid), List.of())
+                        .forEach(onLoad -> onLoad.onNew().push(d)));
+            }
         } finally {
             db.commitAndClose();
         }
