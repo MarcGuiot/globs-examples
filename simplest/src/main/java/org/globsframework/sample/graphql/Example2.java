@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.stream.JsonReader;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import graphql.ExecutionResult;
 import graphql.GraphQL;
 import graphql.schema.GraphQLSchema;
@@ -45,7 +47,9 @@ import org.globsframework.sql.*;
 import org.globsframework.sql.annotations.DbTableName_;
 import org.globsframework.sql.constraints.Constraint;
 import org.globsframework.sql.constraints.Constraints;
-import org.globsframework.sql.drivers.jdbc.JdbcSqlService;
+import org.globsframework.sql.drivers.jdbc.DataSourceSqlService;
+import org.globsframework.sql.drivers.jdbc.DbType;
+import org.globsframework.sql.drivers.jdbc.MappingHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,16 +76,20 @@ insert in the table and return the newly student.
  */
 
 public class Example2 {
+
     public static final Logger LOGGER = LoggerFactory.getLogger(Example2.class);
 
     public static void main(String[] args) throws InterruptedException {
         Gson gson = new Gson();
         Glob argument = ParseCommandLine.parse(ArgumentType.TYPE, args);
 
-        SqlService sqlService = new JdbcSqlService(
-                argument.getNotEmpty(ArgumentType.dbUrl),
-                argument.getNotEmpty(ArgumentType.user),
-                argument.get(ArgumentType.password));
+        DbType dbType = DbType.fromString(argument.getNotEmpty(ArgumentType.dbUrl));
+        HikariConfig configuration = new HikariConfig();
+        configuration.setUsername(argument.getNotEmpty(ArgumentType.user));
+        configuration.setPassword(argument.get(ArgumentType.password));
+        configuration.setJdbcUrl(argument.getNotEmpty(ArgumentType.dbUrl));
+        SqlService sqlService = new DataSourceSqlService(
+                MappingHelper.get(dbType), new HikariDataSource(configuration), dbType);
 
         GlobType[] resources = {DbStudentType.TYPE, DbProfessorType.TYPE, DbClassType.TYPE};
         {
@@ -92,64 +100,59 @@ public class Example2 {
 
         ThreadFactory factory = Thread.ofVirtual().name("GQL").factory();
 
-        GQLGlobCallerBuilder<GQLGlobCaller.GQLContext> gqlGlobCallerBuilder = new GQLGlobCallerBuilder<>(
+        GQLGlobCallerBuilder<DbContext> gqlGlobCallerBuilder = new GQLGlobCallerBuilder<DbContext>(
                 newThreadPerTaskExecutor(factory)
         );
 
         gqlGlobCallerBuilder.registerLoader(QueryType.professor, (gqlField, callContext, parents) -> {
-            load(gqlField, parents, EntityQuery.uuid, DbProfessorType.TYPE, DbProfessorType.uuid, sqlService);
+            load(gqlField, parents, EntityQuery.uuid, DbProfessorType.TYPE, DbProfessorType.uuid, callContext);
             return CompletableFuture.completedFuture(null);
         });
 
         gqlGlobCallerBuilder.registerLoader(QueryType.class_, (gqlField, callContext, parents) -> {
-            load(gqlField, parents, EntityQuery.uuid, DbClassType.TYPE, DbClassType.uuid, sqlService);
+            load(gqlField, parents, EntityQuery.uuid, DbClassType.TYPE, DbClassType.uuid, callContext);
             return CompletableFuture.completedFuture(null);
         });
 
         gqlGlobCallerBuilder.registerLoader(QueryType.student, (gqlField, callContext, parents) -> {
-            load(gqlField, parents, EntityQuery.uuid, DbStudentType.TYPE, DbStudentType.uuid, sqlService);
+            load(gqlField, parents, EntityQuery.uuid, DbStudentType.TYPE, DbStudentType.uuid, callContext);
             return CompletableFuture.completedFuture(null);
         });
 
         gqlGlobCallerBuilder.registerLoader(QueryType.professors, (gqlField, callContext, parents) -> {
-            search(gqlField, parents, sqlService, DbProfessorType.TYPE, DbProfessorType.firstName, DbProfessorType.lastName);
+            search(gqlField, parents, callContext, DbProfessorType.TYPE, DbProfessorType.firstName, DbProfessorType.lastName);
             return CompletableFuture.completedFuture(null);
         });
 
         gqlGlobCallerBuilder.registerLoader(QueryType.classes, (gqlField, callContext, parents) -> {
-            search(gqlField, parents, sqlService, DbClassType.TYPE, DbClassType.name);
+            search(gqlField, parents, callContext, DbClassType.TYPE, DbClassType.name);
             return CompletableFuture.completedFuture(null);
         });
 
         gqlGlobCallerBuilder.registerLoader(QueryType.students, (gqlField, callContext, parents) -> {
-            search(gqlField, parents, sqlService, DbStudentType.TYPE, DbStudentType.firstName, DbStudentType.lastName);
+            search(gqlField, parents, callContext, DbStudentType.TYPE, DbStudentType.firstName, DbStudentType.lastName);
             return CompletableFuture.completedFuture(null);
         });
 
         gqlGlobCallerBuilder.registerLoader(GQLProfessor.mainClasses, (gqlField, callContext, parents) ->
-                loadFromParent(parents, DbProfessorType.uuid, sqlService, DbClassType.principalProfessorUUID, DbClassType.TYPE));
+                loadFromParent(parents, DbProfessorType.uuid, callContext, DbClassType.principalProfessorUUID, DbClassType.TYPE));
 
         gqlGlobCallerBuilder.registerLoader(GQLClass.principalProfessor, (gqlField, callContext, parents) ->
-                loadFromParent(parents, DbClassType.principalProfessorUUID, sqlService, DbProfessorType.uuid, DbProfessorType.TYPE));
+                loadFromParent(parents, DbClassType.principalProfessorUUID, callContext, DbProfessorType.uuid, DbProfessorType.TYPE));
 
         gqlGlobCallerBuilder.registerConnection(GQLClass.students, (gqlField, callContext, parents) -> {
-            SqlConnection db = sqlService.getDb();
-            try {
-                parents.forEach(p ->
-                        ConnectionBuilder.withDbKey(DbStudentType.uuid)
-                                .withParam(Parameter.EMPTY, Parameter.after,
-                                        Parameter.first, Parameter.before,
-                                        Parameter.last, Parameter.skip)
-                                .withOrder(Parameter.orderBy, Parameter.order)
-                                .scanAll(gqlField, p, null, db));
-            } finally {
-                db.commitAndClose();
-            }
+            parents.forEach(p ->
+                    ConnectionBuilder.withDbKey(DbStudentType.uuid)
+                            .withParam(Parameter.EMPTY, Parameter.after,
+                                    Parameter.first, Parameter.before,
+                                    Parameter.last, Parameter.skip)
+                            .withOrder(Parameter.orderBy, Parameter.order)
+                            .scanAll(gqlField, p, null, callContext.dbConnection));
             return CompletableFuture.completedFuture(null);
         }, DbStudentType.uuid, Parameter.orderBy);
 
         gqlGlobCallerBuilder.registerLoader(GQLStudent.class_, (gqlField, callContext, parents) ->
-                loadFromParent(parents, DbStudentType.mainClassUUID, sqlService, DbClassType.uuid, DbClassType.TYPE));
+                loadFromParent(parents, DbStudentType.mainClassUUID, callContext, DbClassType.uuid, DbClassType.TYPE));
 
         final HttpServerRegister httpServerRegister = new HttpServerRegister("EstablishmentServer/0.1");
 
@@ -157,22 +160,25 @@ public class Example2 {
             httpServerRegister.register("/api/resources/" + resource.getName() + "/action/new", null)
                     .post(resource, null, (body, pathParameters, queryParameters) -> {
 
-                        SqlConnection db = sqlService.getDb();
-                        CreateBuilder createBuilder = db.getCreateBuilder(resource);
-
-                        for (Field field : resource.getFields()) {
-                            if (!field.isKeyField()) {
-                                body.getOptValue(field).ifPresent(v -> createBuilder.setObject(field, v));
-                            }
-                        }
-
                         StringField keyField = resource.getKeyFields()[0].asStringField();
                         String uuid = UUID.randomUUID().toString();
-                        createBuilder.set(keyField, uuid);
-                        try (SqlRequest insertRequest = createBuilder.getRequest()) {
-                            insertRequest.run();
+                        SqlConnection db = sqlService.getDb();
+                        try {
+                            CreateBuilder createBuilder = db.getCreateBuilder(resource);
+
+                            for (Field field : resource.getFields()) {
+                                if (!field.isKeyField()) {
+                                    body.getOptValue(field).ifPresent(v -> createBuilder.setObject(field, v));
+                                }
+                            }
+
+                            createBuilder.set(keyField, uuid);
+                            try (SqlRequest insertRequest = createBuilder.getRequest()) {
+                                insertRequest.run();
+                            }
+                        } finally {
+                            db.commitAndClose();
                         }
-                        db.commit();
 
                         return retrieveResource(resource, db, keyField, uuid);
                     })
@@ -202,8 +208,7 @@ public class Example2 {
                     .declareReturnType(resource);
 
             httpServerRegister.register("/api/resources/" + resource.getName() + "/records/{uuid}/action/show", UrlType.TYPE)
-                    .post(resource, null, (body, pathParameters, queryParameters) -> {
-
+                    .get(null, (body, pathParameters, queryParameters) -> {
                         SqlConnection db = sqlService.getDb();
                         StringField keyField = resource.getKeyFields()[0].asStringField();
                         String uuid = pathParameters.getNotEmpty(UrlType.uuid);
@@ -222,7 +227,8 @@ public class Example2 {
         GraphQL gql = GraphQL.newGraphQL(graphQLSchema).build();
 
 
-        GQLGlobCaller<GQLGlobCaller.GQLContext> gqlGlobCaller = gqlGlobCallerBuilder.build(SchemaType.TYPE, new DefaultGlobModel(Parameter.TYPE, EntityQuery.TYPE, SearchQuery.TYPE));
+        GQLGlobCaller<DbContext> gqlGlobCaller =
+                gqlGlobCallerBuilder.build(SchemaType.TYPE, new DefaultGlobModel(Parameter.TYPE, EntityQuery.TYPE, SearchQuery.TYPE));
         httpServerRegister.register("/graphql", null)
                 .post(GraphQlRequest.TYPE, null, null, (body, url, queryParameters, header) -> {
                     String query = body.get(GraphQlRequest.query);
@@ -244,10 +250,11 @@ public class Example2 {
                             variables.put(entry.getKey(), gson.toJson(entry.getValue()));
                         }
                     }
-                    return gqlGlobCaller.query(query, variables, new GQLGlobCaller.GQLContext() {
-                            })
+                    DbContext gqlContext = new DbContext(sqlService.getAutoCommitDb());
+                    return gqlGlobCaller.query(query, variables, gqlContext)
                             .thenApply(glob -> GraphQlResponse.TYPE.instantiate().set(GraphQlResponse.data, GSonUtils.encode(glob, false)))
                             .handle((response, throwable) -> {
+                                gqlContext.dbConnection.commitAndClose();
                                 if (throwable != null) {
                                     return GraphQlResponse.TYPE.instantiate()
                                             .set(GraphQlResponse.errorMessage, throwable.getMessage());
@@ -262,17 +269,16 @@ public class Example2 {
                 httpServerRegister.startAndWaitForStartup(
                         ServerBootstrap.bootstrap()
                                 .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build())
-                                .setListenerPort(argument.get(ArgumentType.port, 3000)));
+                                .setListenerPort(argument.get(ArgumentType.port, 4000)));
         System.out.println("Listen on port: " + httpServerIntegerPair.getSecond());
         synchronized (System.out) {
             System.out.wait();
         }
     }
 
-    private static void search(GqlField gqlField, List<OnLoad> parents, SqlService sqlService, GlobType dbType, StringField... fields) {
+    private static void search(GqlField gqlField, List<OnLoad> parents, DbContext callContext, GlobType dbType, StringField... fields) {
         Optional<String> searchValue = gqlField.field().parameters().map(SearchQuery.search);
-        SqlConnection db = sqlService.getDb();
-        try (SelectQuery query = db.getQueryBuilder(dbType,
+        try (SelectQuery query = callContext.dbConnection.getQueryBuilder(dbType,
                         searchValue.map(s -> Constraints.or(
                                         Arrays.stream(fields).map(f -> Constraints.containsIgnoreCase(f, s)).toArray(Constraint[]::new)))
                                 .orElse(null)
@@ -282,17 +288,15 @@ public class Example2 {
             try (Stream<Glob> globStream = query.executeAsGlobStream()) {
                 globStream.forEach(parents.getFirst().onNew()::push);
             }
-        } finally {
-            db.commitAndClose();
         }
     }
 
-    private static CompletableFuture<Void> loadFromParent(List<OnLoad> parents, StringField mainClassUUID, SqlService sqlService, StringField uuid, GlobType dbType) {
+    private static CompletableFuture<Void> loadFromParent(List<OnLoad> parents, StringField mainClassUUID, DbContext dbContext, StringField uuid, GlobType dbType) {
         Map<String, List<OnLoad>> toQuery =
                 parents.stream().collect(
                         Collectors.groupingBy(onLoad ->
                                 onLoad.parent().get(mainClassUUID)));
-        SqlConnection db = sqlService.getDb();
+        SqlConnection db = dbContext.dbConnection;
         try (SelectQuery query = db.getQueryBuilder(dbType, Constraints.in(uuid, toQuery.keySet()))
                 .selectAll()
                 .getQuery()) {
@@ -300,8 +304,6 @@ public class Example2 {
                 globStream.forEach(d -> toQuery.getOrDefault(d.get(uuid), List.of())
                         .forEach(onLoad -> onLoad.onNew().push(d)));
             }
-        } finally {
-            db.commitAndClose();
         }
         return CompletableFuture.completedFuture(null);
     }
@@ -319,17 +321,15 @@ public class Example2 {
     }
 
     private static void load(GqlField gqlField, List<OnLoad> parents, StringField paramUUIDField, GlobType dbType,
-                             StringField dbUUID, SqlService sqlService) {
+                             StringField dbUUID, DbContext dbContext) {
         String uuid = gqlField.field().parameters().map(paramUUIDField).orElseThrow();
-        SqlConnection db = sqlService.getDb();
+        SqlConnection db = dbContext.dbConnection;
         try (SelectQuery query = db.getQueryBuilder(dbType, Constraints.equal(dbUUID, uuid))
                 .selectAll()
                 .getQuery()) {
             parents.getFirst()
                     .onNew()
                     .push(query.executeUnique());
-        } finally {
-            db.commitAndClose();
         }
     }
 
@@ -597,4 +597,11 @@ public class Example2 {
         }
     }
 
+    static class DbContext implements GQLGlobCaller.GQLContext {
+        final SqlConnection dbConnection;
+
+        public DbContext(SqlConnection dbConnection) {
+            this.dbConnection = dbConnection;
+        }
+    }
 }
