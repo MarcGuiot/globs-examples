@@ -20,10 +20,7 @@ import org.apache.http.impl.nio.reactor.IOReactorConfig;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
 import org.globsframework.core.metamodel.GlobTypeLoaderFactory;
-import org.globsframework.core.metamodel.annotations.FieldName_;
-import org.globsframework.core.metamodel.annotations.InitUniqueGlob;
-import org.globsframework.core.metamodel.annotations.KeyField_;
-import org.globsframework.core.metamodel.annotations.Target;
+import org.globsframework.core.metamodel.annotations.*;
 import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
 import org.globsframework.core.model.Glob;
@@ -70,6 +67,8 @@ import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
 start with following argument
 
  --dbUrl jdbc:hsqldb:file:./db/ --user sa --password ""
+or
+--dbUrl jdbc:postgresql://localhost/postgres --user postgres --password xxxx
 
 The code create and populates empty db.
 
@@ -448,10 +447,13 @@ public class Example2 {
     public static class ArgumentType {
         public static GlobType TYPE;
 
+        @DefaultString_("jdbc:hsqldb:file:./db/")
         public static StringField dbUrl;
 
+        @DefaultString_("sa")
         public static StringField user;
 
+        @DefaultString_("")
         public static StringField password;
 
         public static IntegerField port;
