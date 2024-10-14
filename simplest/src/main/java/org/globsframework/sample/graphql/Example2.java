@@ -27,6 +27,9 @@ import org.globsframework.core.metamodel.annotations.Target;
 import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
 import org.globsframework.core.model.Glob;
+import org.globsframework.core.model.MutableGlob;
+import org.globsframework.core.streams.DbStream;
+import org.globsframework.core.streams.accessors.LongAccessor;
 import org.globsframework.core.utils.Strings;
 import org.globsframework.core.utils.collections.Pair;
 import org.globsframework.graphql.GQLGlobCaller;
@@ -68,11 +71,15 @@ start with following argument
 
  --dbUrl jdbc:hsqldb:file:./db/ --user sa --password ""
 
+The code create and populates empty db.
 
-Expose api route /student en post
-Expose un route /api/openapi
-create a table
-insert in the table and return the newly student.
+Then you can query db with graphQl:
+curl 'http://localhost:4000/graphql' --data-binary '{"query":"{\n  professors: professors{\n   uuid\n    firstName\n    lastName\n    mainClasses{\n      name\n      students{\n        totalCount\n      }\n    }\n  }\n  allClasses: classes{\n     name\n     students{\n      totalCount\n       edges{\n         node{\n           firstName\n           lastName\n         }\n       }\n     }\n   }\n}","variables":{}}'
+
+The code expose on default port 4000 a
+REST api route /api/{class, student, professor} en post/put/get
+OPEN API under /api/openapi
+GRAPHQL route under /graphql
  */
 
 public class Example2 {
@@ -91,11 +98,14 @@ public class Example2 {
         SqlService sqlService = new DataSourceSqlService(
                 MappingHelper.get(dbType), new HikariDataSource(configuration), dbType);
 
-        GlobType[] resources = {DbStudentType.TYPE, DbProfessorType.TYPE, DbClassType.TYPE};
+        GlobType[] resources = { DbStudentType.TYPE, DbProfessorType.TYPE, DbClassType.TYPE };
         {
             SqlConnection db = sqlService.getDb();
             Arrays.asList(resources).forEach(db::createTable);
             db.commitAndClose();
+        }
+        {
+            populate(sqlService);
         }
 
         ThreadFactory factory = Thread.ofVirtual().name("GQL").factory();
@@ -157,7 +167,7 @@ public class Example2 {
         final HttpServerRegister httpServerRegister = new HttpServerRegister("EstablishmentServer/0.1");
 
         for (GlobType resource : resources) {
-            httpServerRegister.register("/api/resources/" + resource.getName() + "/action/new", null)
+            httpServerRegister.register("/api/" + resource.getName(), null)
                     .post(resource, null, (body, pathParameters, queryParameters) -> {
 
                         StringField keyField = resource.getKeyFields()[0].asStringField();
@@ -184,8 +194,8 @@ public class Example2 {
                     })
                     .declareReturnType(resource);
 
-            httpServerRegister.register("/api/resources/" + resource.getName() + "/records/{uuid}/action/edit", UrlType.TYPE)
-                    .post(resource, null, (body, pathParameters, queryParameters) -> {
+            httpServerRegister.register("/api/" + resource.getName() + "/{uuid}", UrlType.TYPE)
+                    .put(resource, null, (body, pathParameters, queryParameters) -> {
 
                         SqlConnection db = sqlService.getDb();
                         StringField keyField = resource.getKeyFields()[0].asStringField();
@@ -207,7 +217,7 @@ public class Example2 {
                     })
                     .declareReturnType(resource);
 
-            httpServerRegister.register("/api/resources/" + resource.getName() + "/records/{uuid}/action/show", UrlType.TYPE)
+            httpServerRegister.register("/api/" + resource.getName() + "/{uuid}", UrlType.TYPE)
                     .get(null, (body, pathParameters, queryParameters) -> {
                         SqlConnection db = sqlService.getDb();
                         StringField keyField = resource.getKeyFields()[0].asStringField();
@@ -274,6 +284,46 @@ public class Example2 {
         synchronized (System.out) {
             System.out.wait();
         }
+    }
+
+    private static void populate(SqlService sqlService) {
+        final SqlConnection db = sqlService.getDb();
+        final SelectBuilder queryBuilder = db.getQueryBuilder(DbStudentType.TYPE);
+        final LongAccessor count = queryBuilder.count(DbStudentType.uuid);
+        try (SelectQuery query = queryBuilder.getQuery()) {
+            final DbStream execute = query.execute();
+            if (execute.next() && count.getLong() != 0) {
+                db.commitAndClose();
+                return;
+            }
+        }
+
+        Glob prof_1 = DbProfessorType.TYPE.instantiate().set(DbProfessorType.firstName, "Jones").set(DbProfessorType.lastName, "David")
+                .set(DbProfessorType.uuid, UUID.randomUUID().toString());
+        Glob prof_2 = DbProfessorType.TYPE.instantiate().set(DbProfessorType.firstName, "Williams").set(DbProfessorType.lastName, "Jessica")
+                .set(DbProfessorType.uuid, UUID.randomUUID().toString());
+        db.populate(Arrays.asList(prof_1, prof_2));
+        final MutableGlob class1_a = DbClassType.TYPE.instantiate().set(DbClassType.name, "1-a")
+                .set(DbClassType.principalProfessorUUID, prof_1.get(DbProfessorType.uuid))
+                .set(DbClassType.uuid, UUID.randomUUID().toString());
+        final MutableGlob class1_b = DbClassType.TYPE.instantiate().set(DbClassType.name, "2-a")
+                .set(DbClassType.principalProfessorUUID, prof_2.get(DbProfessorType.uuid))
+                .set(DbClassType.uuid, UUID.randomUUID().toString());
+        db.populate(Arrays.asList(class1_a, class1_b));
+        String[] surnames = {"Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez",
+                "Wilson", "Martinez", "Anderson", "Taylor", "Thomas", "Moore", "Jackson", "White", "Harris", "Thompson", "Lewis"};
+        String[] firstNames = {"James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Charles",
+                "Thomas", "Mary", "Patricia", "Jennifer", "Linda", "Elizabeth", "Barbara", "Susan", "Jessica", "Sarah", "Karen"};
+        List<Glob> globs = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            globs.add(DbStudentType.TYPE.instantiate()
+                    .set(DbStudentType.uuid, UUID.randomUUID().toString())
+                    .set(DbStudentType.firstName, firstNames[i])
+                    .set(DbStudentType.lastName, surnames[i])
+                    .set(DbStudentType.mainClassUUID, i < 10 ? class1_a.get(DbClassType.uuid) : class1_b.get(DbClassType.uuid)));
+        }
+        db.populate(globs);
+        db.commitAndClose();
     }
 
     private static void search(GqlField gqlField, List<OnLoad> parents, DbContext callContext, GlobType dbType, StringField... fields) {
