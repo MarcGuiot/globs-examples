@@ -66,7 +66,7 @@ import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
 /*
 start with following argument
 
- --dbUrl jdbc:hsqldb:file:./db/ --user sa --password ""
+--dbUrl jdbc:hsqldb:file:./db/ --user sa --password ""
 or
 --dbUrl jdbc:postgresql://localhost/postgres --user postgres --password xxxx
 
@@ -230,7 +230,7 @@ public class Example2 {
         SchemaGenerator schemaGenerator = new SchemaGenerator();
         GlobSchemaGenerator globSchemaGenerator = new GlobSchemaGenerator(SchemaType.TYPE, new DefaultGlobModel(Parameter.TYPE, EntityQuery.TYPE, SearchQuery.TYPE));
         final String s = globSchemaGenerator.generateAll();
-        LOGGER.info("Schema is " + s);
+        LOGGER.info("Schema is\n" + s);
         final TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(s);
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, RuntimeWiring.MOCKED_WIRING);
         GraphQL gql = GraphQL.newGraphQL(graphQLSchema).build();
