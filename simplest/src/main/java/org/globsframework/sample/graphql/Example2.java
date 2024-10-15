@@ -41,6 +41,7 @@ import org.globsframework.graphql.model.GraphQlResponse;
 import org.globsframework.graphql.parser.GqlField;
 import org.globsframework.http.GlobHttpContent;
 import org.globsframework.http.HttpServerRegister;
+import org.globsframework.http.HttpTreatmentWithHeader;
 import org.globsframework.json.GSonUtils;
 import org.globsframework.json.annottations.IsJsonContent_;
 import org.globsframework.sql.*;
@@ -64,7 +65,7 @@ import java.util.stream.Stream;
 import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
 
 /*
-start with following argument
+start with following argument (or none for in memory)
 
 --dbUrl jdbc:hsqldb:file:./db/ --user sa --password ""
 or
@@ -73,7 +74,7 @@ or
 The code create and populates empty db.
 
 Then you can query db with graphQl:
-curl 'http://localhost:4000/graphql' --data-binary '{"query":"{\n  professors: professors{\n   uuid\n    firstName\n    lastName\n    mainClasses{\n      name\n      students{\n        totalCount\n      }\n    }\n  }\n  allClasses: classes{\n     name\n     students{\n      totalCount\n       edges{\n         node{\n           firstName\n           lastName\n         }\n       }\n     }\n   }\n}","variables":{}}'
+curl 'http://localhost:4000/api/graphql' --data-binary '{"query":"{\n  professors: professors{\n   uuid\n    firstName\n    lastName\n    mainClasses{\n      name\n      students{\n        totalCount\n      }\n    }\n  }\n  allClasses: classes{\n     name\n     students{\n      totalCount\n       edges{\n         node{\n           firstName\n           lastName\n         }\n       }\n     }\n   }\n}","variables":{}}'
 
 The code expose on default port 4000 a
 REST api route /api/{class, student, professor} en post/put/get
@@ -86,33 +87,44 @@ public class Example2 {
     public static final Logger LOGGER = LoggerFactory.getLogger(Example2.class);
 
     public static void main(String[] args) throws InterruptedException {
-        Gson gson = new Gson();
+
+        // parse argument with default value.
         Glob argument = ParseCommandLine.parse(ArgumentType.TYPE, args);
 
+        // retrieve jdbc url, user, etc to init Hikari pool.
         DbType dbType = DbType.fromString(argument.getNotEmpty(ArgumentType.dbUrl));
         HikariConfig configuration = new HikariConfig();
         configuration.setUsername(argument.getNotEmpty(ArgumentType.user));
         configuration.setPassword(argument.get(ArgumentType.password));
         configuration.setJdbcUrl(argument.getNotEmpty(ArgumentType.dbUrl));
+
+        // create a SqlService based on datasource.
+        // SqlService is the entry point to access the db.
         SqlService sqlService = new DataSourceSqlService(
                 MappingHelper.get(dbType), new HikariDataSource(configuration), dbType);
 
+        // list resources we managed (for db and api)
         GlobType[] resources = { DbStudentType.TYPE, DbProfessorType.TYPE, DbClassType.TYPE };
         {
             SqlConnection db = sqlService.getDb();
+            //create tables if they do not exist in db.
             Arrays.asList(resources).forEach(db::createTable);
             db.commitAndClose();
         }
         {
+            //fill db with 20 students and 2 classes
             populate(sqlService);
         }
 
+        // Create a virtual thread as graphql code is mostly db access.
         ThreadFactory factory = Thread.ofVirtual().name("GQL").factory();
 
+        // create a globs graphql builder where we register loader to fetch db data.
         GQLGlobCallerBuilder<DbContext> gqlGlobCallerBuilder = new GQLGlobCallerBuilder<DbContext>(
                 newThreadPerTaskExecutor(factory)
         );
 
+        // loader from root (so without parent).
         gqlGlobCallerBuilder.registerLoader(QueryType.professor, (gqlField, callContext, parents) -> {
             load(gqlField, parents, EntityQuery.uuid, DbProfessorType.TYPE, DbProfessorType.uuid, callContext);
             return CompletableFuture.completedFuture(null);
@@ -128,6 +140,7 @@ public class Example2 {
             return CompletableFuture.completedFuture(null);
         });
 
+        // search from root (still without parent).
         gqlGlobCallerBuilder.registerLoader(QueryType.professors, (gqlField, callContext, parents) -> {
             search(gqlField, parents, callContext, DbProfessorType.TYPE, DbProfessorType.firstName, DbProfessorType.lastName);
             return CompletableFuture.completedFuture(null);
@@ -143,12 +156,18 @@ public class Example2 {
             return CompletableFuture.completedFuture(null);
         });
 
+        // loader from point in the tree (with one or many parents).
         gqlGlobCallerBuilder.registerLoader(GQLProfessor.mainClasses, (gqlField, callContext, parents) ->
                 loadFromParent(parents, DbProfessorType.uuid, callContext, DbClassType.principalProfessorUUID, DbClassType.TYPE));
 
         gqlGlobCallerBuilder.registerLoader(GQLClass.principalProfessor, (gqlField, callContext, parents) ->
                 loadFromParent(parents, DbClassType.principalProfessorUUID, callContext, DbProfessorType.uuid, DbProfessorType.TYPE));
 
+        gqlGlobCallerBuilder.registerLoader(GQLStudent.class_, (gqlField, callContext, parents) ->
+                loadFromParent(parents, DbStudentType.mainClassUUID, callContext, DbClassType.uuid, DbClassType.TYPE));
+
+        // register a connection. All the standard fields associated with the cursor management are handle generically.
+        // the base64 of the cursor contain the json for id/idValue and sortField/sortValue
         gqlGlobCallerBuilder.registerConnection(GQLClass.students, (gqlField, callContext, parents) -> {
             parents.forEach(p ->
                     ConnectionBuilder.withDbKey(DbStudentType.uuid)
@@ -160,29 +179,35 @@ public class Example2 {
             return CompletableFuture.completedFuture(null);
         }, DbStudentType.uuid, Parameter.orderBy);
 
-        gqlGlobCallerBuilder.registerLoader(GQLStudent.class_, (gqlField, callContext, parents) ->
-                loadFromParent(parents, DbStudentType.mainClassUUID, callContext, DbClassType.uuid, DbClassType.TYPE));
 
+        // create an HttpServerRegister to register Http end point.
         final HttpServerRegister httpServerRegister = new HttpServerRegister("EstablishmentServer/0.1");
 
+        // for each resource we register post, put, get.
         for (GlobType resource : resources) {
             httpServerRegister.register("/api/" + resource.getName(), null)
                     .post(resource, null, (body, pathParameters, queryParameters) -> {
 
+                        // get the key
                         StringField keyField = resource.getKeyFields()[0].asStringField();
                         String uuid = UUID.randomUUID().toString();
                         SqlConnection db = sqlService.getDb();
                         try {
+                            //an insert into request
                             CreateBuilder createBuilder = db.getCreateBuilder(resource);
 
                             for (Field field : resource.getFields()) {
+                                //ignore key field.
                                 if (!field.isKeyField()) {
+                                    //if value is set add it to the insert request.
                                     body.getOptValue(field).ifPresent(v -> createBuilder.setObject(field, v));
                                 }
                             }
 
+                            // add uuid
                             createBuilder.set(keyField, uuid);
                             try (SqlRequest insertRequest = createBuilder.getRequest()) {
+                                // execute the request.
                                 insertRequest.run();
                             }
                         } finally {
@@ -193,9 +218,8 @@ public class Example2 {
                     })
                     .declareReturnType(resource);
 
-            httpServerRegister.register("/api/" + resource.getName() + "/{uuid}", UrlType.TYPE)
-                    .put(resource, null, (body, pathParameters, queryParameters) -> {
-
+            HttpServerRegister.Verb onUrl = httpServerRegister.register("/api/" + resource.getName() + "/{uuid}", UrlType.TYPE);
+            onUrl.put(resource, null, (body, pathParameters, queryParameters) -> {
                         SqlConnection db = sqlService.getDb();
                         StringField keyField = resource.getKeyFields()[0].asStringField();
                         String uuid = pathParameters.getNotEmpty(UrlType.uuid);
@@ -210,22 +234,40 @@ public class Example2 {
                         try (SqlRequest insertRequest = updateBuilder.getRequest()) {
                             insertRequest.run();
                         }
-                        db.commit();
+                        finally {
+                            db.commit();
+                        }
 
                         return retrieveResource(resource, db, keyField, uuid);
                     })
                     .declareReturnType(resource);
 
-            httpServerRegister.register("/api/" + resource.getName() + "/{uuid}", UrlType.TYPE)
-                    .get(null, (body, pathParameters, queryParameters) -> {
+            onUrl.get(null, (body, pathParameters, queryParameters) -> {
                         SqlConnection db = sqlService.getDb();
                         StringField keyField = resource.getKeyFields()[0].asStringField();
                         String uuid = pathParameters.getNotEmpty(UrlType.uuid);
                         return retrieveResource(resource, db, keyField, uuid);
                     })
                     .declareReturnType(resource);
+
+            onUrl.delete(null, (body, pathParameters, queryParameters) -> {
+                SqlConnection db = sqlService.getDb();
+                StringField keyField = resource.getKeyFields()[0].asStringField();
+                String uuid = pathParameters.getNotEmpty(UrlType.uuid);
+                try (SqlRequest deleteRequest = db.getDeleteRequest(resource, Constraints.equal(keyField, uuid))) {
+                    deleteRequest.run();
+                }
+                finally {
+                    db.commitAndClose();
+                }
+                return CompletableFuture.completedFuture(null);
+            });
         }
 
+        // we register now the entry point for graphQL.
+
+        // we generate the graphql schema.
+        // to load it in the graphql library to response to query on schema.
         SchemaParser schemaParser = new SchemaParser();
         SchemaGenerator schemaGenerator = new SchemaGenerator();
         GlobSchemaGenerator globSchemaGenerator = new GlobSchemaGenerator(SchemaType.TYPE, new DefaultGlobModel(Parameter.TYPE, EntityQuery.TYPE, SearchQuery.TYPE));
@@ -235,45 +277,56 @@ public class Example2 {
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, RuntimeWiring.MOCKED_WIRING);
         GraphQL gql = GraphQL.newGraphQL(graphQLSchema).build();
 
-
         GQLGlobCaller<DbContext> gqlGlobCaller =
                 gqlGlobCallerBuilder.build(SchemaType.TYPE, new DefaultGlobModel(Parameter.TYPE, EntityQuery.TYPE, SearchQuery.TYPE));
-        httpServerRegister.register("/graphql", null)
-                .post(GraphQlRequest.TYPE, null, null, (body, url, queryParameters, header) -> {
-                    String query = body.get(GraphQlRequest.query);
-                    if (query.contains("__schema")) {
-                        final ExecutionResult execute = gql.execute(query);
-                        final Map<String, Object> stringObjectMap = execute.toSpecification();
-                        final String s1 = gson.toJson(stringObjectMap);
-                        return CompletableFuture.completedFuture(GlobHttpContent.TYPE.instantiate()
-                                .set(GlobHttpContent.content, s1.getBytes(StandardCharsets.UTF_8)));
-                    }
-                    String v = body.get(GraphQlRequest.variables);
-                    Map<String, String> variables = new HashMap<>();
-                    if (Strings.isNotEmpty(v)) {
-                        JsonReader jsonReader = new JsonReader(new StringReader(v));
-                        JsonElement jsonElement = JsonParser.parseReader(jsonReader);
-                        JsonObject asJsonObject = jsonElement.getAsJsonObject();
-                        Set<Map.Entry<String, JsonElement>> entries = asJsonObject.entrySet();
-                        for (Map.Entry<String, JsonElement> entry : entries) {
-                            variables.put(entry.getKey(), gson.toJson(entry.getValue()));
+        httpServerRegister.register("/api/graphql", null)
+                .post(GraphQlRequest.TYPE, null, null, new HttpTreatmentWithHeader() {
+                    final Gson gson = new Gson();
+                    public CompletableFuture<Glob> consume(Glob body, Glob url, Glob queryParameters, Glob header) throws Exception {
+                        String query = body.get(GraphQlRequest.query);
+
+                        // hack to response to query on schema.
+                        if (query.contains("__schema")) {
+                            final ExecutionResult execute = gql.execute(query);
+                            final Map<String, Object> stringObjectMap = execute.toSpecification();
+                            final String s1 = gson.toJson(stringObjectMap);
+                            return CompletableFuture.completedFuture(GlobHttpContent.TYPE.instantiate()
+                                    .set(GlobHttpContent.content, s1.getBytes(StandardCharsets.UTF_8)));
                         }
+
+                        // manage variables.
+                        String v = body.get(GraphQlRequest.variables);
+                        Map<String, String> variables = new HashMap<>();
+                        if (Strings.isNotEmpty(v)) {
+                            JsonReader jsonReader = new JsonReader(new StringReader(v));
+                            JsonElement jsonElement = JsonParser.parseReader(jsonReader);
+                            JsonObject asJsonObject = jsonElement.getAsJsonObject();
+                            Set<Map.Entry<String, JsonElement>> entries = asJsonObject.entrySet();
+                            for (Map.Entry<String, JsonElement> entry : entries) {
+                                variables.put(entry.getKey(), gson.toJson(entry.getValue()));
+                            }
+                        }
+
+                        // handle graphql request.
+                        DbContext gqlContext = new DbContext(sqlService.getAutoCommitDb());
+                        return gqlGlobCaller.query(query, variables, gqlContext)
+                                .thenApply(glob -> GraphQlResponse.TYPE.instantiate().set(GraphQlResponse.data, GSonUtils.encode(glob, false)))
+                                .handle((response, throwable) -> {
+                                    gqlContext.dbConnection.commitAndClose();
+                                    if (throwable != null) {
+                                        return GraphQlResponse.TYPE.instantiate()
+                                                .set(GraphQlResponse.errorMessage, throwable.getMessage());
+                                    } else {
+                                        return response;
+                                    }
+                                });
                     }
-                    DbContext gqlContext = new DbContext(sqlService.getAutoCommitDb());
-                    return gqlGlobCaller.query(query, variables, gqlContext)
-                            .thenApply(glob -> GraphQlResponse.TYPE.instantiate().set(GraphQlResponse.data, GSonUtils.encode(glob, false)))
-                            .handle((response, throwable) -> {
-                                gqlContext.dbConnection.commitAndClose();
-                                if (throwable != null) {
-                                    return GraphQlResponse.TYPE.instantiate()
-                                            .set(GraphQlResponse.errorMessage, throwable.getMessage());
-                                } else {
-                                    return response;
-                                }
-                            });
                 });
+
+        // register openAPI entrypoint on /api
         httpServerRegister.registerOpenApi();
 
+        // register to and start apache server.
         Pair<HttpServer, Integer> httpServerIntegerPair =
                 httpServerRegister.startAndWaitForStartup(
                         ServerBootstrap.bootstrap()
@@ -359,6 +412,7 @@ public class Example2 {
 
     private static CompletableFuture<Glob> retrieveResource(GlobType resource, SqlConnection db, StringField keyField, String uuid) {
         Glob createdData;
+        // sql select * from 'resource' where uuid='uuidValue'
         try (SelectQuery query = db.getQueryBuilder(resource, Constraints.equal(keyField, uuid))
                 .selectAll()
                 .getQuery()) {
@@ -381,7 +435,6 @@ public class Example2 {
                     .push(query.executeUnique());
         }
     }
-
 
     public static class DbClassType {
         @DbTableName_("classes")
@@ -447,7 +500,7 @@ public class Example2 {
     public static class ArgumentType {
         public static GlobType TYPE;
 
-        @DefaultString_("jdbc:hsqldb:file:./db/")
+        @DefaultString_("jdbc:hsqldb:mem:db")
         public static StringField dbUrl;
 
         @DefaultString_("sa")
@@ -634,7 +687,6 @@ public class Example2 {
             GlobTypeLoaderFactory.create(Parameter.class).load();
         }
     }
-
 
     public static class GraphQlRequest {
         public static GlobType TYPE;
