@@ -25,7 +25,7 @@ import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
 import org.globsframework.core.model.Glob;
 import org.globsframework.core.model.MutableGlob;
-import org.globsframework.core.streams.DbStream;
+import org.globsframework.core.streams.GlobStream;
 import org.globsframework.core.streams.accessors.LongAccessor;
 import org.globsframework.core.utils.Strings;
 import org.globsframework.core.utils.collections.Pair;
@@ -290,7 +290,7 @@ public class Example2 {
         final SelectBuilder queryBuilder = db.getQueryBuilder(DbStudentType.TYPE);
         final LongAccessor count = queryBuilder.count(DbStudentType.uuid);
         try (SelectQuery query = queryBuilder.getQuery()) {
-            final DbStream execute = query.execute();
+            final GlobStream execute = query.execute();
             if (execute.next() && count.getLong() != 0) {
                 db.commitAndClose();
                 return;
