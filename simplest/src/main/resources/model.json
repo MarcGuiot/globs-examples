@@ -1,0 +1,398 @@
+{
+  "dbTypes": [
+    [
+      {
+        "kind": "Student",
+        "fields": [
+          {
+            "name": "uuid",
+            "type": "string",
+            "annotations": [
+              {
+                "_kind": "KeyField",
+                "index": 0
+              }
+            ]
+          },
+          {
+            "name": "firstName",
+            "type": "string",
+            "annotations": [
+              {
+                "_kind": "Searchable"
+              }
+            ]
+          },
+          {
+            "name": "lastName",
+            "type": "string",
+            "annotations": [
+              {
+                "_kind": "Searchable"
+              }
+            ]
+          },
+          {
+            "name": "mainClassUUID",
+            "type": "string"
+          }
+        ],
+        "annotations": [
+          {
+            "_kind": "DbTableName",
+            "NAME": "students"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "kind": "Class",
+        "fields": [
+          {
+            "name": "uuid",
+            "type": "string",
+            "annotations": [
+              {
+                "_kind": "KeyField",
+                "index": 0
+              }
+            ]
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "annotations": [
+              {
+                "_kind": "Searchable"
+              }
+            ]
+          },
+          {
+            "name": "principalProfessorUUID",
+            "type": "string"
+          }
+        ],
+        "annotations": [
+          {
+            "_kind": "DbTableName",
+            "NAME": "classes"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "kind": "Professor",
+        "fields": [
+          {
+            "name": "uuid",
+            "type": "string",
+            "annotations": [
+              {
+                "_kind": "KeyField",
+                "index": 0
+              }
+            ]
+          },
+          {
+            "name": "firstName",
+            "type": "string",
+            "annotations": [
+              {
+                "_kind": "Searchable"
+              }
+            ]
+          },
+          {
+            "name": "lastName",
+            "type": "string",
+            "annotations": [
+              {
+                "_kind": "Searchable"
+              }
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "_kind": "DbTableName",
+            "NAME": "professors"
+          }
+        ]
+      }
+    ]
+  ],
+  "graphqlTypes": [
+    {
+      "kind": "SchemaType",
+      "fields": [
+        {
+          "name": "query",
+          "type": "glob",
+          "kind": "QueryType"
+        }
+      ]
+    },
+    {
+      "kind": "QueryType",
+      "fields": [
+        {
+          "name": "professors",
+          "type": "globArray",
+          "kind": "GQLProfessor",
+          "annotations": [
+            {
+              "_kind": "GQLQueryParam",
+              "name": "SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "classes",
+          "type": "globArray",
+          "kind": "GQLClass",
+          "annotations": [
+            {
+              "_kind": "GQLQueryParam",
+              "name": "SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "students",
+          "type": "globArray",
+          "kind": "GQLStudent",
+          "annotations": [
+            {
+              "_kind": "GQLQueryParam",
+              "name": "SearchQuery"
+            }
+          ]
+        },
+        {
+          "name": "professor",
+          "type": "glob",
+          "kind": "GQLProfessor",
+          "annotations": [
+            {
+              "_kind": "GQLQueryParam",
+              "name": "EntityQuery"
+            }
+          ]
+        },
+        {
+          "name": "class",
+          "type": "glob",
+          "kind": "GQLClass",
+          "annotations": [
+            {
+              "_kind": "GQLQueryParam",
+              "name": "EntityQuery"
+            }
+          ]
+        },
+        {
+          "name": "student",
+          "type": "glob",
+          "kind": "GQLStudent",
+          "annotations": [
+            {
+              "_kind": "GQLQueryParam",
+              "name": "EntityQuery"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "GQLQueryParam",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "kind": "GQLProfessor",
+      "fields": [
+        {
+          "name": "uuid",
+          "type": "string"
+        },
+        {
+          "name": "firstName",
+          "type": "string"
+        },
+        {
+          "name": "lastName",
+          "type": "string"
+        },
+        {
+          "name": "mainClasses",
+          "type": "globArray",
+          "kind": "GQLClass",
+          "annotations": [
+            {
+              "_kind": "Link",
+              "fromField": "uuid",
+              "toField": "principalProfessorUUID"
+            }
+          ]
+        }
+      ],
+      "annotations": [
+        {
+          "_kind": "DbTarget",
+          "dbResource": "Professor"
+        }
+      ]
+    },
+    {
+      "kind": "GQLClass",
+      "fields": [
+        {
+          "name": "uuid",
+          "type": "string"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "principalProfessor",
+          "type": "glob",
+          "kind": "GQLProfessor",
+          "annotations": [
+            {
+              "_kind": "Link",
+              "fromField": "principalProfessorUUID",
+              "toField": "uuid"
+            }
+          ]
+        },
+        {
+          "name": "students",
+          "type": "glob",
+          "kind": "StudentConnection",
+          "annotations": [
+            {
+              "_kind": "GQLQueryParam",
+              "name": "Parameter"
+            },
+            {
+              "_kind": "IsConnection"
+            }
+          ]
+        }
+      ],
+      "annotations": [
+        {
+          "_kind": "DbTarget",
+          "dbResource": "Class"
+        }
+      ]
+    },
+    {
+      "kind": "StudentConnection",
+      "fields": [
+        {
+          "name": "totalCount",
+          "type": "int"
+        },
+        {
+          "name": "edges",
+          "type": "globArray",
+          "kind": "StudentHedge"
+        },
+        {
+          "name": "pageInfo",
+          "type": "glob",
+          "kind": "GQLPageInfo",
+          "annotations": [
+            {
+              "_kind": "GQLMandatory"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "StudentHedge",
+      "fields": [
+        {
+          "name": "node",
+          "type": "glob",
+          "kind": "GQLStudent"
+        }
+      ]
+    },
+    {
+      "kind": "GQLStudent",
+      "fields": [
+        {
+          "name": "uuid",
+          "type": "string"
+        },
+        {
+          "name": "firstName",
+          "type": "string"
+        },
+        {
+          "name": "lastName",
+          "type": "string"
+        },
+        {
+          "name": "class",
+          "type": "glob",
+          "kind": "GQLClass",
+          "annotations": [
+            {
+              "_kind": "Link",
+              "fromField": "mainClassUUID",
+              "toField": "uuid"
+            }
+          ]
+        }
+      ],
+      "annotations": [
+        {
+          "_kind": "DbTarget",
+          "dbResource": "Student"
+        }
+      ]
+    },
+    {
+      "kind": "GQLPageInfo",
+      "fields": [
+        {
+          "name": "startCursor",
+          "type": "string"
+        },
+        {
+          "name": "endCursor",
+          "type": "string"
+        },
+        {
+          "name": "hasNextPage",
+          "type": "boolean",
+          "annotations": [
+            {
+              "_kind": "GQLMandatory"
+            }
+          ]
+        },
+        {
+          "name": "hasPreviousPage",
+          "type": "boolean",
+          "annotations": [
+            {
+              "_kind": "GQLMandatory"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

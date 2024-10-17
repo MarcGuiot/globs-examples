@@ -79,7 +79,7 @@ curl 'http://localhost:4000/api/graphql' --data-binary '{"query":"{\n  professor
 The code expose on default port 4000 a
 REST api route /api/{class, student, professor} en post/put/get
 OPEN API under /api/openapi
-GRAPHQL route under /graphql
+GRAPHQL route under /api/graphql
  */
 
 public class Example2 {
