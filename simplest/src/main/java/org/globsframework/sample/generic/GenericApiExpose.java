@@ -68,15 +68,17 @@ import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
 
 /*
 
-start with following argument (or none for in memory)
+start with following argument --model path_to_model (simplest/src/main/resources/model.json for example)
 
 --dbUrl jdbc:hsqldb:file:./db/ --user sa --password ""
 or
 --dbUrl jdbc:postgresql://localhost/postgres --user postgres --password xxxx
 
-The code create and populates empty db.
+The code create the Db if needed.
 
-Then you can query db with graphQl:
+if you init the db with Example2 and use the model resources/model.json then :
+
+you can query db with graphQl:
 curl 'http://localhost:4000/api/graphql' --data-binary '{"query":"{\n  professors: professors{\n   uuid\n    firstName\n    lastName\n    mainClasses{\n      name\n      students{\n        totalCount\n      }\n    }\n  }\n  allClasses: classes{\n     name\n     students{\n      totalCount\n       edges{\n         node{\n           firstName\n           lastName\n         }\n       }\n     }\n   }\n}","variables":{}}'
 
 The code expose on default port 4000 a
@@ -150,7 +152,7 @@ public class GenericApiExpose {
                             for (Field field : resource.getFields()) {
                                 //ignore key field.
                                 if (!field.isKeyField()) {
-                                    //if value is set add it to the insert request.
+                                    //if value is not null add it to the insert request.
                                     body.getOptValue(field).ifPresent(v -> createBuilder.setObject(field, v));
                                 }
                             }
@@ -179,7 +181,10 @@ public class GenericApiExpose {
 
                         for (Field field : resource.getFields()) {
                             if (!field.isKeyField()) {
-                                body.getOptValue(field).ifPresent(v -> updateBuilder.updateUntyped(field, v));
+                                // if set => can be null!
+                                if (body.isSet(field)) {
+                                    updateBuilder.updateUntyped(field, body.getValue(field));
+                                }
                             }
                         }
 
@@ -268,7 +273,7 @@ public class GenericApiExpose {
                         });
             }
             List<GlobType> remainning = new ArrayList<>(subObject);
-            while (remainning.size() > 0) {
+            while (!remainning.isEmpty()) {
                 GlobType glObjectType = remainning.removeFirst();
                 for (Field field : glObjectType.getFields()) {
 
