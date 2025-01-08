@@ -379,12 +379,12 @@ public class GenericApiExpose {
         httpServerRegister.registerOpenApi();
 
         // register to and start apache server.
-        Pair<HttpServer, Integer> httpServerIntegerPair =
+        HttpServerRegister.HttpStartup httpServerIntegerPair =
                 httpServerRegister.startAndWaitForStartup(
                         ServerBootstrap.bootstrap()
                                 .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build())
                                 .setListenerPort(argument.get(ArgumentType.port, 4000)));
-        System.out.println("Listen on port: " + httpServerIntegerPair.getSecond());
+        System.out.println("Listen on port: " + httpServerIntegerPair.listenPort());
         synchronized (System.out) {
             System.out.wait();
         }

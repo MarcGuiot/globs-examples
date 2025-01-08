@@ -79,11 +79,11 @@ public class Example1 {
                 })
                 .declareReturnType(StudentType.TYPE);
         httpServerRegister.registerOpenApi();
-        Pair<HttpServer, Integer> httpServerIntegerPair =
+        HttpServerRegister.HttpStartup httpServerIntegerPair =
                 httpServerRegister.startAndWaitForStartup(
                         ServerBootstrap.bootstrap()
                                 .setListenerPort(argument.get(ArgumentType.port, 3000)));
-        System.out.println("Listen on port: " + httpServerIntegerPair.getSecond());
+        System.out.println("Listen on port: " + httpServerIntegerPair.listenPort());
     }
 
     public static class StudentType {
