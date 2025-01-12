@@ -123,6 +123,7 @@ public static class GQLClass {
 
     @Target(StudentConnection.class)
     @GQLQueryParam_(Parameter.class)
+    @Link_(from = "uuid", to = "mainClassUUID")
     public static GlobField students;
 
     static {

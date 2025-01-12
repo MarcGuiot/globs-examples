@@ -138,7 +138,24 @@ public class GenericApiExpose {
 
         // for each resource we register post, put, get.
         for (GlobType resource : resources) {
-            httpServerRegister.register("/api/" + resource.getName().toLowerCase(), null)
+            HttpServerRegister.Verb apiPath = httpServerRegister.register("/api/" + resource.getName().toLowerCase(), null);
+            apiPath.get(resource, (body, pathParameters, queryParameters) -> {
+                SqlConnection db = sqlService.getDb();
+                List<Glob> createdData;
+                try (SelectQuery query = db.getQueryBuilder(resource)
+                        .selectAll()
+                        .getQuery()) {
+                    createdData = query.executeAsGlobs();
+                } finally {
+                    db.commitAndClose();
+                }
+                return CompletableFuture.completedFuture(GlobHttpContent.TYPE.instantiate()
+                        .set(GlobHttpContent.statusCode, 200)
+                        .set(GlobHttpContent.mimeType, "application/json")
+                        .set(GlobHttpContent.content, GSonUtils.encode(createdData.toArray(Glob[]::new), false)
+                                .getBytes(StandardCharsets.UTF_8)));
+            });
+            apiPath
                     .post(resource, null, (body, pathParameters, queryParameters) -> {
 
                         // get the key
@@ -278,7 +295,33 @@ public class GenericApiExpose {
                 for (Field field : glObjectType.getFields()) {
 
                     Glob linkAnnotation = field.findAnnotation(Link.KEY);
-                    if (linkAnnotation != null) {
+
+                    if (field.hasAnnotation(IsConnection.KEY)) {
+                        GlobField connectionField = field.asGlobField();
+                        GlobType gqlTargetField = connectionField.getTargetType().getField("edges").asGlobArrayField().getTargetType()
+                                .getField("node").asGlobField().getTargetType();
+                        GlobType targetResource = resources.getType(gqlTargetField.getAnnotation(DbTarget.KEY).get(DbTarget.dbResource));
+                        StringField uuid = targetResource.getKeyFields()[0].asStringField();
+                        String dbSourceTypeName = glObjectType.getAnnotation(DbTarget.KEY).get(DbTarget.dbResource);
+                        GlobType dbSourceType = resources.getType(dbSourceTypeName);
+                        StringField sourceUUID = dbSourceType.getKeyFields()[0].asStringField();
+                        Field dbSourceField = dbSourceType.getField(linkAnnotation.get(Link.fromField));
+                        StringField dbTargetTypeField = targetResource.getField(linkAnnotation.get(Link.toField)).asStringField();
+                        gqlGlobCallerBuilder.registerConnection(connectionField,
+                                (gqlField, callContext, parents) -> {
+                                    parents.forEach(p ->
+                                            ConnectionBuilder.withDbKey(uuid)
+                                                    .withParam(Parameter.EMPTY, Parameter.after,
+                                                            Parameter.first, Parameter.before,
+                                                            Parameter.last, Parameter.skip)
+                                                    .withOrder(Parameter.orderBy, Parameter.order)
+                                                    .scanAll(gqlField, p,
+                                                            Constraints.and(
+                                                                    Constraints.equal(dbTargetTypeField, p.parent().get(sourceUUID))),
+                                                            callContext.dbConnection));
+                                    return CompletableFuture.completedFuture(null);
+                                }, uuid, Parameter.orderBy);
+                    } else if (linkAnnotation != null) {
                         GlobType targetType = field instanceof GlobField ? field.asGlobField().getTargetType() :
                                 field instanceof GlobArrayField ? field.asGlobArrayField().getTargetType() : null;
                         if (targetType != null) {
@@ -296,24 +339,6 @@ public class GenericApiExpose {
                         } else {
                             throw new RuntimeException("Field not");
                         }
-                    }
-
-                    if (field.hasAnnotation(IsConnection.KEY)) {
-                        GlobField connectionField = field.asGlobField();
-                        GlobType gqlTargetField = connectionField.getTargetType().getField("edges").asGlobArrayField().getTargetType()
-                                .getField("node").asGlobField().getTargetType();
-                        GlobType targetResource = resources.getType(gqlTargetField.getAnnotation(DbTarget.KEY).get(DbTarget.dbResource));
-                        StringField uuid = targetResource.getKeyFields()[0].asStringField();
-                        gqlGlobCallerBuilder.registerConnection(connectionField, (gqlField, callContext, parents) -> {
-                            parents.forEach(p ->
-                                    ConnectionBuilder.withDbKey(uuid)
-                                            .withParam(Parameter.EMPTY, Parameter.after,
-                                                    Parameter.first, Parameter.before,
-                                                    Parameter.last, Parameter.skip)
-                                            .withOrder(Parameter.orderBy, Parameter.order)
-                                            .scanAll(gqlField, p, null, callContext.dbConnection));
-                            return CompletableFuture.completedFuture(null);
-                        }, uuid, Parameter.orderBy);
                     }
                 }
             }
