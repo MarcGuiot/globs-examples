@@ -14,9 +14,10 @@ import graphql.schema.idl.RuntimeWiring;
 import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
-import org.apache.http.impl.nio.bootstrap.HttpServer;
-import org.apache.http.impl.nio.bootstrap.ServerBootstrap;
-import org.apache.http.impl.nio.reactor.IOReactorConfig;
+import org.apache.hc.core5.http.impl.bootstrap.AsyncServerBootstrap;
+import org.apache.hc.core5.http2.config.H2Config;
+import org.apache.hc.core5.http2.impl.nio.bootstrap.H2ServerBootstrap;
+import org.apache.hc.core5.reactor.IOReactorConfig;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobModel;
 import org.globsframework.core.metamodel.GlobModelBuilder;
@@ -65,6 +66,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
+import static java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor;
 
 /*
 
@@ -136,6 +138,12 @@ public class GenericApiExpose {
         // create an HttpServerRegister to register Http end point.
         final HttpServerRegister httpServerRegister = new HttpServerRegister("EstablishmentServer/0.1");
 
+        httpServerRegister.register("/api/version", null)
+                .get(null, (body, pathParameters, queryParameters) -> {
+                    return CompletableFuture.completedFuture(GlobHttpContent.TYPE.instantiate()
+                            .set(GlobHttpContent.statusCode, 201));
+                });
+
         // for each resource we register post, put, get.
         for (GlobType resource : resources) {
             HttpServerRegister.Verb apiPath = httpServerRegister.register("/api/" + resource.getName().toLowerCase(), null);
@@ -154,7 +162,9 @@ public class GenericApiExpose {
                         .set(GlobHttpContent.mimeType, "application/json")
                         .set(GlobHttpContent.content, GSonUtils.encode(createdData.toArray(Glob[]::new), false)
                                 .getBytes(StandardCharsets.UTF_8)));
-            });
+            })
+            ;
+//                    .withExecutor(newVirtualThreadPerTaskExecutor());
             apiPath
                     .post(resource, null, (body, pathParameters, queryParameters) -> {
 
@@ -221,7 +231,8 @@ public class GenericApiExpose {
                         String uuid = pathParameters.getNotEmpty(UrlType.uuid);
                         return retrieveResource(resource, db, keyField, uuid);
                     })
-                    .declareReturnType(resource);
+                    .declareReturnType(resource)
+                    .withExecutor(newVirtualThreadPerTaskExecutor());
 
             onUrl.delete(null, (body, pathParameters, queryParameters) -> {
                 SqlConnection db = sqlService.getDb();
@@ -404,12 +415,12 @@ public class GenericApiExpose {
         httpServerRegister.registerOpenApi();
 
         // register to and start apache server.
-        HttpServerRegister.HttpStartup httpServerIntegerPair =
-                httpServerRegister.startAndWaitForStartup(
-                        ServerBootstrap.bootstrap()
-                                .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build())
-                                .setListenerPort(argument.get(ArgumentType.port, 4000)));
-        System.out.println("Listen on port: " + httpServerIntegerPair.listenPort());
+        HttpServerRegister.Server httpServerIntegerPair = httpServerRegister.startAndWaitForStartup(
+                H2ServerBootstrap.bootstrap()
+                        .setH2Config(H2Config.DEFAULT)
+                        .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build()),
+                argument.get(ArgumentType.port, 4000));
+        System.out.println("Listen on port: " + httpServerIntegerPair.getPort());
         synchronized (System.out) {
             System.out.wait();
         }

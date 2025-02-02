@@ -14,9 +14,8 @@ import graphql.schema.idl.RuntimeWiring;
 import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
-import org.apache.http.impl.nio.bootstrap.HttpServer;
-import org.apache.http.impl.nio.bootstrap.ServerBootstrap;
-import org.apache.http.impl.nio.reactor.IOReactorConfig;
+import org.apache.hc.core5.http.impl.bootstrap.AsyncServerBootstrap;
+import org.apache.hc.core5.reactor.IOReactorConfig;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
 import org.globsframework.core.metamodel.GlobTypeLoaderFactory;
@@ -327,12 +326,11 @@ public class Example2 {
         httpServerRegister.registerOpenApi();
 
         // register to and start apache server.
-        HttpServerRegister.HttpStartup httpServerIntegerPair =
-                httpServerRegister.startAndWaitForStartup(
-                        ServerBootstrap.bootstrap()
-                                .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build())
-                                .setListenerPort(argument.get(ArgumentType.port, 4000)));
-        System.out.println("Listen on port: " + httpServerIntegerPair.listenPort());
+        HttpServerRegister.Server server = httpServerRegister.startAndWaitForStartup(
+                AsyncServerBootstrap.bootstrap()
+                        .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build()),
+                argument.get(ArgumentType.port, 4000));
+        System.out.println("Listen on port: " + server.getPort());
         synchronized (System.out) {
             System.out.wait();
         }

@@ -1,7 +1,6 @@
 package org.globsframework.sample.rest;
 
-import org.apache.http.impl.nio.bootstrap.HttpServer;
-import org.apache.http.impl.nio.bootstrap.ServerBootstrap;
+import org.apache.hc.core5.http.impl.bootstrap.AsyncServerBootstrap;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
 import org.globsframework.core.metamodel.GlobTypeLoaderFactory;
@@ -78,12 +77,9 @@ public class Example1 {
                     return CompletableFuture.completedFuture(createdData);
                 })
                 .declareReturnType(StudentType.TYPE);
-        httpServerRegister.registerOpenApi();
-        HttpServerRegister.HttpStartup httpServerIntegerPair =
-                httpServerRegister.startAndWaitForStartup(
-                        ServerBootstrap.bootstrap()
-                                .setListenerPort(argument.get(ArgumentType.port, 3000)));
-        System.out.println("Listen on port: " + httpServerIntegerPair.listenPort());
+        HttpServerRegister.Server server = httpServerRegister.startAndWaitForStartup(
+                AsyncServerBootstrap.bootstrap(), argument.get(ArgumentType.port, 3000));
+        System.out.println("Listen on port: " + server.getPort());
     }
 
     public static class StudentType {
