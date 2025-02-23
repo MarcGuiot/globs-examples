@@ -18,7 +18,8 @@ import org.apache.hc.core5.http.impl.bootstrap.AsyncServerBootstrap;
 import org.apache.hc.core5.reactor.IOReactorConfig;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
-import org.globsframework.core.metamodel.GlobTypeLoaderFactory;
+import org.globsframework.core.metamodel.GlobTypeBuilder;
+import org.globsframework.core.metamodel.GlobTypeBuilderFactory;
 import org.globsframework.core.metamodel.annotations.*;
 import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
@@ -27,23 +28,21 @@ import org.globsframework.core.model.MutableGlob;
 import org.globsframework.core.streams.GlobStream;
 import org.globsframework.core.streams.accessors.LongAccessor;
 import org.globsframework.core.utils.Strings;
-import org.globsframework.core.utils.collections.Pair;
 import org.globsframework.graphql.GQLGlobCaller;
 import org.globsframework.graphql.GQLGlobCallerBuilder;
 import org.globsframework.graphql.GlobSchemaGenerator;
 import org.globsframework.graphql.OnLoad;
 import org.globsframework.graphql.db.ConnectionBuilder;
-import org.globsframework.graphql.model.GQLMandatory_;
-import org.globsframework.graphql.model.GQLPageInfo;
-import org.globsframework.graphql.model.GQLQueryParam_;
-import org.globsframework.graphql.model.GraphQlResponse;
+import org.globsframework.graphql.model.*;
 import org.globsframework.graphql.parser.GqlField;
 import org.globsframework.http.GlobHttpContent;
 import org.globsframework.http.HttpServerRegister;
 import org.globsframework.http.HttpTreatmentWithHeader;
 import org.globsframework.json.GSonUtils;
+import org.globsframework.json.annottations.IsJsonContent;
 import org.globsframework.json.annottations.IsJsonContent_;
 import org.globsframework.sql.*;
+import org.globsframework.sql.annotations.DbTableName;
 import org.globsframework.sql.annotations.DbTableName_;
 import org.globsframework.sql.constraints.Constraint;
 import org.globsframework.sql.constraints.Constraints;
@@ -103,7 +102,7 @@ public class Example2 {
                 MappingHelper.get(dbType), new HikariDataSource(configuration), dbType);
 
         // list resources we managed (for db and api)
-        GlobType[] resources = { DbStudentType.TYPE, DbProfessorType.TYPE, DbClassType.TYPE };
+        GlobType[] resources = {DbStudentType.TYPE, DbProfessorType.TYPE, DbClassType.TYPE};
         {
             SqlConnection db = sqlService.getDb();
             //create tables if they do not exist in db.
@@ -232,8 +231,7 @@ public class Example2 {
 
                         try (SqlRequest insertRequest = updateBuilder.getRequest()) {
                             insertRequest.run();
-                        }
-                        finally {
+                        } finally {
                             db.commit();
                         }
 
@@ -255,8 +253,7 @@ public class Example2 {
                 String uuid = pathParameters.getNotEmpty(UrlType.uuid);
                 try (SqlRequest deleteRequest = db.getDeleteRequest(resource, Constraints.equal(keyField, uuid))) {
                     deleteRequest.run();
-                }
-                finally {
+                } finally {
                     db.commitAndClose();
                 }
                 return CompletableFuture.completedFuture(null);
@@ -281,6 +278,7 @@ public class Example2 {
         httpServerRegister.register("/api/graphql", null)
                 .post(GraphQlRequest.TYPE, null, null, new HttpTreatmentWithHeader() {
                     final Gson gson = new Gson();
+
                     public CompletableFuture<Glob> consume(Glob body, Glob url, Glob queryParameters, Glob header) throws Exception {
                         String query = body.get(GraphQlRequest.query);
 
@@ -436,266 +434,381 @@ public class Example2 {
 
     public static class DbClassType {
         @DbTableName_("classes")
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @KeyField_
-        public static StringField uuid;
+        public static final StringField uuid;
 
-        public static StringField name;
+        public static final StringField name;
 
-        public static StringField principalProfessorUUID;
+        public static final StringField principalProfessorUUID;
 
         static {
-            GlobTypeLoaderFactory.create(DbClassType.class, "class").load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("class");
+            typeBuilder.addAnnotation(DbTableName.create("classes"));
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid", KeyField.ZERO);
+            name = typeBuilder.declareStringField("name");
+            principalProfessorUUID = typeBuilder.declareStringField("principalProfessorUUID");
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(DbClassType.class, "class").load();
         }
     }
 
     public static class DbProfessorType {
         @DbTableName_("professors")
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @KeyField_
-        public static StringField uuid;
+        public static final StringField uuid;
 
-        public static StringField firstName;
+        public static final StringField firstName;
 
-        public static StringField lastName;
+        public static final StringField lastName;
 
         static {
-            GlobTypeLoaderFactory.create(DbProfessorType.class, "professor").load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("professor");
+            typeBuilder.addAnnotation(DbTableName.create("professors"));
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid", KeyField.ZERO);
+            firstName = typeBuilder.declareStringField("firstName");
+            lastName = typeBuilder.declareStringField("lastName");
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(DbProfessorType.class, "professor").load();
         }
     }
 
     public static class DbStudentType {
         @DbTableName_("students")
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @KeyField_
-        public static StringField uuid;
+        public static final StringField uuid;
 
-        public static StringField firstName;
+        public static final StringField firstName;
 
-        public static StringField lastName;
+        public static final StringField lastName;
 
-        public static StringField mainClassUUID;
+        public static final StringField mainClassUUID;
 
         static {
-            GlobTypeLoaderFactory.create(DbStudentType.class, "student").load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("student");
+            typeBuilder.addAnnotation(DbTableName.create("students"));
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid", KeyField.ZERO);
+            firstName = typeBuilder.declareStringField("firstName");
+            lastName = typeBuilder.declareStringField("lastName");
+            mainClassUUID = typeBuilder.declareStringField("mainClassUUID");
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(DbStudentType.class, "student").load();
         }
     }
 
     public static class UrlType {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @FieldName_("uuid")
-        public static StringField uuid;
+        public static final StringField uuid;
 
         static {
-            GlobTypeLoaderFactory.create(UrlType.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("url");
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid");
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(UrlType.class).load();
         }
     }
 
     public static class ArgumentType {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @DefaultString_("jdbc:hsqldb:mem:db")
-        public static StringField dbUrl;
+        public static final StringField dbUrl;
 
         @DefaultString_("sa")
-        public static StringField user;
+        public static final StringField user;
 
         @DefaultString_("")
-        public static StringField password;
+        public static final StringField password;
 
-        public static IntegerField port;
+        public static final IntegerField port;
 
         static {
-            GlobTypeLoaderFactory.create(ArgumentType.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("argument");
+            TYPE = typeBuilder.unCompleteType();
+            dbUrl = typeBuilder.declareStringField("dbUrl", DefaultString.create("jdbc:hsqldb:mem:db"));
+            user = typeBuilder.declareStringField("user", DefaultString.create("sa"));
+            password = typeBuilder.declareStringField("password", DefaultString.create(""));
+            port = typeBuilder.declareIntegerField("port");
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(ArgumentType.class).load();
         }
     }
 
     public static class SchemaType {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @Target(QueryType.class)
-        public static GlobField query;
+        public static final GlobField query;
 
         static {
-            GlobTypeLoaderFactory.create(SchemaType.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("schema");
+            TYPE = typeBuilder.unCompleteType();
+            query = typeBuilder.declareGlobField("query", QueryType.TYPE);
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(SchemaType.class).load();
         }
     }
 
     public static class QueryType {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @GQLQueryParam_(SearchQuery.class)
         @Target(GQLProfessor.class)
-        public static GlobArrayField professors;
+        public static final GlobArrayField professors;
 
         @GQLQueryParam_(SearchQuery.class)
         @Target(GQLClass.class)
         @FieldName_("classes")
-        public static GlobArrayField classes;
+        public static final GlobArrayField classes;
 
         @GQLQueryParam_(SearchQuery.class)
         @Target(GQLStudent.class)
-        public static GlobArrayField students;
+        public static final GlobArrayField students;
 
         @GQLQueryParam_(EntityQuery.class)
         @Target(GQLProfessor.class)
-        public static GlobField professor;
+        public static final GlobField professor;
 
         @GQLQueryParam_(EntityQuery.class)
         @Target(GQLClass.class)
         @FieldName_("class")
-        public static GlobField class_;
+        public static final GlobField class_;
 
         @GQLQueryParam_(EntityQuery.class)
         @Target(GQLStudent.class)
-        public static GlobField student;
+        public static final GlobField student;
 
         static {
-            GlobTypeLoaderFactory.create(QueryType.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("query");
+            TYPE = typeBuilder.unCompleteType();
+            professors = typeBuilder.declareGlobArrayField("professors", GQLProfessor.TYPE,
+                    GQLQueryParam.create(SearchQuery.TYPE));
+            classes = typeBuilder.declareGlobArrayField("classes", GQLClass.TYPE,
+                    GQLQueryParam.create(SearchQuery.TYPE));
+            students = typeBuilder.declareGlobArrayField("students", GQLStudent.TYPE,
+                    GQLQueryParam.create(SearchQuery.TYPE));
+            professor = typeBuilder.declareGlobField("professor", GQLProfessor.TYPE,
+                    GQLQueryParam.create(EntityQuery.TYPE));
+            class_ = typeBuilder.declareGlobField("class", GQLClass.TYPE,
+                    GQLQueryParam.create(EntityQuery.TYPE));
+            student = typeBuilder.declareGlobField("student", GQLStudent.TYPE,
+                    GQLQueryParam.create(EntityQuery.TYPE));
+
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(QueryType.class).load();
         }
     }
 
     public static class SearchQuery {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField search;
+        public static final StringField search;
 
         static {
-            GlobTypeLoaderFactory.create(SearchQuery.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("search");
+            TYPE = typeBuilder.unCompleteType();
+            search = typeBuilder.declareStringField("search");
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(SearchQuery.class).load();
         }
     }
 
     public static class EntityQuery {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField uuid;
+        public static final StringField uuid;
 
         static {
-            GlobTypeLoaderFactory.create(EntityQuery.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("entity");
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid");
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(EntityQuery.class).load();
         }
     }
 
     public static class GQLClass {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField uuid;
+        public static final StringField uuid;
 
-        public static StringField name;
+        public static final StringField name;
 
         @Target(GQLProfessor.class)
-        public static GlobField principalProfessor;
+        public static final GlobField principalProfessor;
 
         @Target(StudentConnection.class)
         @GQLQueryParam_(Parameter.class)
-        public static GlobField students;
+        public static final GlobField students;
 
         static {
-            GlobTypeLoaderFactory.create(GQLClass.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GQLClass");
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid");
+            name = typeBuilder.declareStringField("name");
+            principalProfessor = typeBuilder.declareGlobField("principalProfessor", GQLProfessor.TYPE);
+            students = typeBuilder.declareGlobField("students", StudentConnection.TYPE,
+                    GQLQueryParam.create(Parameter.TYPE));
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(GQLClass.class).load();
         }
     }
 
     public static class GQLStudent {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField uuid;
+        public static final StringField uuid;
 
-        public static StringField firstName;
+        public static final StringField firstName;
 
-        public static StringField lastName;
+        public static final StringField lastName;
 
         @Target(GQLClass.class)
         @FieldName_("class")
-        public static GlobField class_;
+        public static final GlobField class_;
 
         static {
-            GlobTypeLoaderFactory.create(GQLStudent.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GQLStudent");
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid");
+            firstName = typeBuilder.declareStringField("firstName");
+            lastName = typeBuilder.declareStringField("lastName");
+            class_ = typeBuilder.declareGlobField("class", GQLClass.TYPE);
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(GQLStudent.class).load();
         }
     }
 
     public static class GQLProfessor {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField uuid;
+        public static final StringField uuid;
 
-        public static StringField firstName;
+        public static final StringField firstName;
 
-        public static StringField lastName;
+        public static final StringField lastName;
 
         @Target(GQLClass.class)
-        public static GlobArrayField mainClasses;
+        public static final GlobArrayField mainClasses;
 
         static {
-            GlobTypeLoaderFactory.create(GQLProfessor.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GQLProfessor");
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid");
+            firstName = typeBuilder.declareStringField("firstName");
+            lastName = typeBuilder.declareStringField("lastName");
+            mainClasses = typeBuilder.declareGlobArrayField("mainClasses", GQLClass.TYPE);
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(GQLProfessor.class).load();
         }
     }
 
     public static class StudentConnection {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static IntegerField totalCount;
+        public static final IntegerField totalCount;
 
         @Target(StudentHedge.class)
-        public static GlobArrayField edges;
+        public static final GlobArrayField edges;
 
         @Target(GQLPageInfo.class)
         @GQLMandatory_
-        public static GlobField pageInfo;
+        public static final GlobField pageInfo;
 
         static {
-            GlobTypeLoaderFactory.create(StudentConnection.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("StudentConnection");
+            TYPE = typeBuilder.unCompleteType();
+            totalCount = typeBuilder.declareIntegerField("totalCount");
+            edges = typeBuilder.declareGlobArrayField("edges", StudentHedge.TYPE);
+            pageInfo = typeBuilder.declareGlobField("pageInfo", GQLPageInfo.TYPE);
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(StudentConnection.class).load();
         }
     }
 
     public static class StudentHedge {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @Target(GQLStudent.class)
-        public static GlobField node;
+        public static final GlobField node;
 
         static {
-            GlobTypeLoaderFactory.create(StudentHedge.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("StudentHedge");
+            TYPE = typeBuilder.unCompleteType();
+            node = typeBuilder.declareGlobField("node", GQLStudent.TYPE);
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(StudentHedge.class).load();
         }
     }
 
     public static class Parameter {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
+
+        public static final IntegerField first;
+
+        public static final StringField after;
+
+        public static final IntegerField last;
+
+        public static final StringField before;
+
+        public static final IntegerField skip;
+
+        public static final StringField order; // asc, desc ?
+
+        public static final StringField orderBy; //
 
         @InitUniqueGlob
-        public static Glob EMPTY;
-
-        public static IntegerField first;
-
-        public static StringField after;
-
-        public static IntegerField last;
-
-        public static StringField before;
-
-        public static IntegerField skip;
-
-        public static StringField order; // asc, desc ?
-
-        public static StringField orderBy; //
+        public static final Glob EMPTY;
 
         static {
-            GlobTypeLoaderFactory.create(Parameter.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("parameter");
+            TYPE = typeBuilder.unCompleteType();
+            first = typeBuilder.declareIntegerField("first");
+            after = typeBuilder.declareStringField("after");
+            last = typeBuilder.declareIntegerField("last");
+            before = typeBuilder.declareStringField("before");
+            skip = typeBuilder.declareIntegerField("skip");
+            order = typeBuilder.declareStringField("order");
+            orderBy = typeBuilder.declareStringField("orderBy");
+            typeBuilder.complete();
+            EMPTY = TYPE.instantiate();
+//            GlobTypeLoaderFactory.create(Parameter.class).load();
         }
     }
 
     public static class GraphQlRequest {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField query;
+        public static final StringField query;
 
         @IsJsonContent_
-        public static StringField variables;
+        public static final StringField variables;
 
         static {
-            GlobTypeLoaderFactory.create(GraphQlRequest.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("request");
+            TYPE = typeBuilder.unCompleteType();
+            query = typeBuilder.declareStringField("query");
+            variables = typeBuilder.declareStringField("variables", IsJsonContent.UNIQUE_GLOB);
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(GraphQlRequest.class).load();
         }
     }
 

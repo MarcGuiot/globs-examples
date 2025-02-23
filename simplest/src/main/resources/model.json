@@ -40,7 +40,7 @@
         "annotations": [
           {
             "_kind": "DbTableName",
-            "NAME": "students"
+            "name": "students"
           }
         ]
       }
@@ -76,7 +76,7 @@
         "annotations": [
           {
             "_kind": "DbTableName",
-            "NAME": "classes"
+            "name": "classes"
           }
         ]
       }
@@ -117,7 +117,7 @@
         "annotations": [
           {
             "_kind": "DbTableName",
-            "NAME": "professors"
+            "name": "professors"
           }
         ]
       }
@@ -236,8 +236,8 @@
           "annotations": [
             {
               "_kind": "Link",
-              "fromField": "uuid",
-              "toField": "principalProfessorUUID"
+              "from": "uuid",
+              "to": "principalProfessorUUID"
             }
           ]
         }
@@ -267,8 +267,8 @@
           "annotations": [
             {
               "_kind": "Link",
-              "fromField": "principalProfessorUUID",
-              "toField": "uuid"
+              "from": "principalProfessorUUID",
+              "to": "uuid"
             }
           ]
         },
@@ -286,8 +286,8 @@
             },
             {
               "_kind": "Link",
-              "fromField": "uuid",
-              "toField": "mainClassUUID"
+              "from": "uuid",
+              "to": "mainClassUUID"
             }
           ]
         }
@@ -355,8 +355,8 @@
           "annotations": [
             {
               "_kind": "Link",
-              "fromField": "mainClassUUID",
-              "toField": "uuid"
+              "from": "mainClassUUID",
+              "to": "uuid"
             }
           ]
         }

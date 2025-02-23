@@ -14,22 +14,17 @@ import graphql.schema.idl.RuntimeWiring;
 import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
-import org.apache.hc.core5.http.impl.bootstrap.AsyncServerBootstrap;
 import org.apache.hc.core5.http2.config.H2Config;
 import org.apache.hc.core5.http2.impl.nio.bootstrap.H2ServerBootstrap;
 import org.apache.hc.core5.reactor.IOReactorConfig;
 import org.globsframework.commandline.ParseCommandLine;
-import org.globsframework.core.metamodel.GlobModel;
-import org.globsframework.core.metamodel.GlobModelBuilder;
-import org.globsframework.core.metamodel.GlobType;
-import org.globsframework.core.metamodel.GlobTypeLoaderFactory;
+import org.globsframework.core.metamodel.*;
 import org.globsframework.core.metamodel.annotations.*;
 import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
 import org.globsframework.core.model.Glob;
 import org.globsframework.core.utils.Files;
 import org.globsframework.core.utils.Strings;
-import org.globsframework.core.utils.collections.Pair;
 import org.globsframework.graphql.GQLGlobCaller;
 import org.globsframework.graphql.GQLGlobCallerBuilder;
 import org.globsframework.graphql.GlobSchemaGenerator;
@@ -44,6 +39,7 @@ import org.globsframework.http.HttpServerRegister;
 import org.globsframework.http.HttpTreatmentWithHeader;
 import org.globsframework.json.GSonUtils;
 import org.globsframework.json.annottations.AllJsonAnnotations;
+import org.globsframework.json.annottations.IsJsonContent;
 import org.globsframework.json.annottations.IsJsonContent_;
 import org.globsframework.sql.*;
 import org.globsframework.sql.annotations.AllSqlAnnotations;
@@ -90,6 +86,7 @@ GRAPHQL route under /graphql
  */
 
 public class GenericApiExpose {
+    public static long startAt = System.currentTimeMillis();
 
     public static final Logger LOGGER = LoggerFactory.getLogger(GenericApiExpose.class);
 
@@ -143,6 +140,17 @@ public class GenericApiExpose {
                     return CompletableFuture.completedFuture(GlobHttpContent.TYPE.instantiate()
                             .set(GlobHttpContent.statusCode, 201));
                 });
+
+        httpServerRegister.register("/api/greeting", null)
+                .get(GreetingParam.TYPE, (body, pathParameters, queryParameters) -> {
+                    String message = String.format("Hello %s!!!", queryParameters.get(GreetingParam.name, "world"));
+                    if (queryParameters.get(GreetingParam.sleep, 0) > 0) {
+                        Thread.sleep(queryParameters.get(GreetingParam.sleep, 0));
+                    }
+                    return CompletableFuture.completedFuture(GreetingResponse.TYPE.instantiate()
+                            .set(GreetingResponse.name, message));
+                })
+                .withExecutor(newVirtualThreadPerTaskExecutor());
 
         // for each resource we register post, put, get.
         for (GlobType resource : resources) {
@@ -292,7 +300,7 @@ public class GenericApiExpose {
                             subObject.add(targetType);
                             String dbTypeName = targetType.getAnnotation(DbTarget.KEY).get(DbTarget.dbResource);
                             GlobType dbType = resources.getType(dbTypeName);
-                            StringField[] searchableFields = dbType.getFieldsWithAnnotation(Searchable.KEY).stream().map(Field::asStringField).toArray(StringField[]::new);
+                            StringField[] searchableFields = dbType.getFieldsWithAnnotation(Searchable.UNIQUE_KEY).stream().map(Field::asStringField).toArray(StringField[]::new);
 
                             gqlGlobCallerBuilder.registerLoader(globField, (gqlField, callContext, parents) -> {
                                 search(gqlField, parents, callContext, dbType, searchableFields);
@@ -307,7 +315,7 @@ public class GenericApiExpose {
 
                     Glob linkAnnotation = field.findAnnotation(Link.KEY);
 
-                    if (field.hasAnnotation(IsConnection.KEY)) {
+                    if (field.hasAnnotation(IsConnection.UNIQUE_KEY)) {
                         GlobField connectionField = field.asGlobField();
                         GlobType gqlTargetField = connectionField.getTargetType().getField("edges").asGlobArrayField().getTargetType()
                                 .getField("node").asGlobField().getTargetType();
@@ -408,7 +416,9 @@ public class GenericApiExpose {
                                         }
                                     });
                         }
-                    });
+                    })
+//            ;
+                    .withExecutor(newVirtualThreadPerTaskExecutor());
         }
 
         // register openAPI entrypoint on /api
@@ -418,9 +428,13 @@ public class GenericApiExpose {
         HttpServerRegister.Server httpServerIntegerPair = httpServerRegister.startAndWaitForStartup(
                 H2ServerBootstrap.bootstrap()
                         .setH2Config(H2Config.DEFAULT)
+//                        .setCanonicalHostName("localhost")
+//                        .setTlsStrategy((sessionLayer, host, localAddress, remoteAddress, attachment, handshakeTimeout) -> {
+//                            throw new RuntimeException("No TLS");
+//                        })
                         .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build()),
                 argument.get(ArgumentType.port, 4000));
-        System.out.println("Listen on port: " + httpServerIntegerPair.getPort());
+        System.out.println("Start in " + (System.currentTimeMillis() - startAt) + "ms. Listen on port: " + httpServerIntegerPair.getPort());
         synchronized (System.out) {
             System.out.wait();
         }
@@ -485,73 +499,102 @@ public class GenericApiExpose {
     }
 
     public static class UrlType {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @FieldName_("uuid")
-        public static StringField uuid;
+        public static final StringField uuid;
 
         static {
-            GlobTypeLoaderFactory.create(UrlType.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Url");
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid");
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(UrlType.class).load();
         }
     }
 
     public static class ArgumentType {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @DefaultString_("jdbc:hsqldb:mem:db")
-        public static StringField dbUrl;
+        public static final StringField dbUrl;
 
         @DefaultString_("sa")
-        public static StringField user;
+        public static final StringField user;
 
         @DefaultString_("")
-        public static StringField password;
+        public static final StringField password;
 
-        public static StringField model;
+        public static final StringField model;
 
-        public static IntegerField port;
+        public static final IntegerField port;
 
         static {
-            GlobTypeLoaderFactory.create(ArgumentType.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Argument");
+            TYPE = typeBuilder.unCompleteType();
+            dbUrl = typeBuilder.declareStringField("dbUrl", DefaultString.create("jdbc:hsqldb:mem:db"));
+            user = typeBuilder.declareStringField("user", DefaultString.create("sa"));
+            password = typeBuilder.declareStringField("password", DefaultString.create(""));
+            model = typeBuilder.declareStringField("model");
+            port = typeBuilder.declareIntegerField("port");
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(ArgumentType.class).load();
         }
     }
 
 
     public static class Parameter {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
+
+        public static final IntegerField first;
+
+        public static final StringField after;
+
+        public static final IntegerField last;
+
+        public static final StringField before;
+
+        public static final IntegerField skip;
+
+        public static final StringField order; // asc, desc ?
+
+        public static final StringField orderBy; //
 
         @InitUniqueGlob
-        public static Glob EMPTY;
-
-        public static IntegerField first;
-
-        public static StringField after;
-
-        public static IntegerField last;
-
-        public static StringField before;
-
-        public static IntegerField skip;
-
-        public static StringField order; // asc, desc ?
-
-        public static StringField orderBy; //
+        public static final Glob EMPTY;
 
         static {
-            GlobTypeLoaderFactory.create(Parameter.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Parameter");
+            TYPE = typeBuilder.unCompleteType();
+            first = typeBuilder.declareIntegerField("first");
+            after = typeBuilder.declareStringField("after");
+            last = typeBuilder.declareIntegerField("last");
+            before = typeBuilder.declareStringField("before");
+            skip = typeBuilder.declareIntegerField("skip");
+            order = typeBuilder.declareStringField("order");
+            orderBy = typeBuilder.declareStringField("orderBy");
+            typeBuilder.complete();
+            EMPTY = TYPE.instantiate();
+
+//            GlobTypeLoaderFactory.create(Parameter.class).load();
         }
     }
 
     public static class GraphQlRequest {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField query;
+        public static final StringField query;
 
         @IsJsonContent_
-        public static StringField variables;
+        public static final StringField variables;
 
         static {
-            GlobTypeLoaderFactory.create(GraphQlRequest.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GraphQlRequest");
+            TYPE = typeBuilder.unCompleteType();
+            query = typeBuilder.declareStringField("query");
+            variables = typeBuilder.declareStringField("variables", IsJsonContent.UNIQUE_GLOB);
+            typeBuilder.complete();
+//            GlobTypeLoaderFactory.create(GraphQlRequest.class).load();
         }
     }
 
@@ -564,36 +607,85 @@ public class GenericApiExpose {
     }
 
     public static class Model {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
         @IsJsonContent_
-        public static StringArrayField dbTypes;
+        public static final StringArrayField dbTypes;
 
         @IsJsonContent_
-        public static StringField graphqlTypes;
+        public static final StringField graphqlTypes;
 
         static {
-            GlobTypeLoaderFactory.create(Model.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Model");
+            TYPE = typeBuilder.unCompleteType();
+            dbTypes = typeBuilder.declareStringArrayField("dbTypes", IsJsonContent.UNIQUE_GLOB);
+            graphqlTypes = typeBuilder.declareStringField("graphqlTypes", IsJsonContent.UNIQUE_GLOB);
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(Model.class).load();
         }
     }
 
     public static class SearchQuery {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField search;
+        public static final StringField search;
 
         static {
-            GlobTypeLoaderFactory.create(SearchQuery.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("SearchQuery");
+            TYPE = typeBuilder.unCompleteType();
+            search = typeBuilder.declareStringField("search");
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(SearchQuery.class).load();
         }
     }
 
     public static class EntityQuery {
-        public static GlobType TYPE;
+        public static final GlobType TYPE;
 
-        public static StringField uuid;
+        public static final StringField uuid;
 
         static {
-            GlobTypeLoaderFactory.create(EntityQuery.class).load();
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("EntityQuery");
+            TYPE = typeBuilder.unCompleteType();
+            uuid = typeBuilder.declareStringField("uuid");
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(EntityQuery.class).load();
+        }
+    }
+
+    public static class GreetingParam {
+        public static final GlobType TYPE;
+
+        public static final StringField name;
+
+        public static final IntegerField sleep;
+
+        static {
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GreetingParam");
+            TYPE = typeBuilder.unCompleteType();
+            name = typeBuilder.declareStringField("name");
+            sleep = typeBuilder.declareIntegerField("sleep");
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(GreetingParam.class).load();
+        }
+    }
+
+    public static class GreetingResponse {
+        public static final GlobType TYPE;
+
+        public static final StringField name;
+
+        static {
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GreetingResponse");
+            TYPE = typeBuilder.unCompleteType();
+            name = typeBuilder.declareStringField("name");
+            typeBuilder.complete();
+
+//            GlobTypeLoaderFactory.create(GreetingResponse.class).load();
         }
     }
 

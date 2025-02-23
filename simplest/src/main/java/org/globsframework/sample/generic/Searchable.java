@@ -1,34 +1,40 @@
 package org.globsframework.sample.generic;
 
 import org.globsframework.core.metamodel.GlobType;
-import org.globsframework.core.metamodel.GlobTypeLoader;
-import org.globsframework.core.metamodel.GlobTypeLoaderFactory;
+import org.globsframework.core.metamodel.GlobTypeBuilder;
+import org.globsframework.core.metamodel.GlobTypeBuilderFactory;
 import org.globsframework.core.metamodel.annotations.GlobCreateFromAnnotation;
 import org.globsframework.core.metamodel.annotations.InitUniqueGlob;
 import org.globsframework.core.metamodel.annotations.InitUniqueKey;
-import org.globsframework.core.metamodel.fields.StringField;
 import org.globsframework.core.model.Glob;
 import org.globsframework.core.model.Key;
-import org.globsframework.graphql.model.GQLQueryParam_;
+import org.globsframework.core.model.KeyBuilder;
 
 import java.lang.annotation.Annotation;
 
 public class Searchable {
-    public static GlobType TYPE;
+    public static final GlobType TYPE;
 
     @InitUniqueKey
-    public static Key KEY;
+    public static final Key UNIQUE_KEY;
 
     @InitUniqueGlob
-    public static Glob INSTANCE;
+    public static final Glob UNIQUE_INSTANCE;
 
     static {
-        GlobTypeLoader loader = GlobTypeLoaderFactory.create(Searchable.class);
-        loader.register(GlobCreateFromAnnotation.class, Searchable::create);
-        loader.load();
+        GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Searchable");
+        TYPE = typeBuilder.unCompleteType();
+        typeBuilder.complete();
+        UNIQUE_KEY = KeyBuilder.newEmptyKey(TYPE);
+        UNIQUE_INSTANCE = TYPE.instantiate();
+        typeBuilder.register(GlobCreateFromAnnotation.class, Searchable::create);
+
+//        GlobTypeLoader loader = GlobTypeLoaderFactory.create(Searchable.class);
+//        loader.register(GlobCreateFromAnnotation.class, Searchable::create);
+//        loader.load();
     }
 
     private static Glob create(Annotation annotation) {
-        return INSTANCE;
+        return UNIQUE_INSTANCE;
     }
 }
