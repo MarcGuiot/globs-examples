@@ -7,30 +7,21 @@
     <packaging>jar</packaging>
     <artifactId>simplest</artifactId>
     <name>sample of a exposing api</name>
-    <version>4.1-SNAPSHOT</version>
+    <version>4.1.0</version>
 
     <repositories>
         <repository>
-            <id>github-marc</id>
-            <url>https://maven.pkg.github.com/MarcGuiot/*</url>
-        </repository>
-        <repository>
-            <id>central</id>
-            <url>https://repo1.maven.org/maven2</url>
+            <id>github-globsframework</id>
+            <url>https://maven.pkg.github.com/globsframework/*</url>
         </repository>
     </repositories>
 
     <distributionManagement>
         <repository>
-            <id>github</id>
+            <id>github-globsframework</id>
             <name>GitHub Packages</name>
             <url>https://maven.pkg.github.com/${env.GITHUB_REPOSITORY}</url>
         </repository>
-        <snapshotRepository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/${env.GITHUB_REPOSITORY}</url>
-        </snapshotRepository>
     </distributionManagement>
 
     <build>
@@ -132,17 +123,17 @@
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs</artifactId>
-            <version>4.1-SNAPSHOT</version>
+            <version>4.1.0</version>
         </dependency>
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-commandline</artifactId>
-            <version>4.1-SNAPSHOT</version>
+            <version>4.1.0</version>
         </dependency>
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-http</artifactId>
-            <version>4.1-SNAPSHOT</version>
+            <version>4.1.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>io.etcd</groupId>
@@ -153,7 +144,7 @@
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-sql</artifactId>
-            <version>4.1-SNAPSHOT</version>
+            <version>4.1.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.mariadb.jdbc</groupId>
@@ -172,25 +163,24 @@
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-graphql</artifactId>
-            <version>4.1-SNAPSHOT</version>
+            <version>4.1.0</version>
         </dependency>
+
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-generate</artifactId>
-            <version>4.1-SNAPSHOT</version>
+            <version>4.1.0</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>6.0.0</version>
+        </dependency>
         <dependency>
             <groupId>com.graphql-java</groupId>
             <artifactId>graphql-java</artifactId>
-            <version>21.1</version>
-        </dependency>
-
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.2</version>
-            <scope>test</scope>
+            <version>21.5</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -218,9 +208,10 @@
 <!--            <version>2.20.0</version>-->
 <!--        </dependency>-->
         <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-            <version>6.0.0</version>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
